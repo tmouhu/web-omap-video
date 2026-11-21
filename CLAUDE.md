@@ -38,8 +38,10 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
   ImageCanvas), `capabilities.ts` (WMS/WMTS GetCapabilities).
 - `src/lib/raster/` – `affine.ts` (pixel→map affine, `fitTransform` 1/2/3+ points), `worldfile.ts` (+ .prj, CRS guess),
   `kml.ts` (KMZ/KML GroundOverlay), `rasterMap.ts` (pyramid, georef, `viewAffine`), `load.ts` (file set → source).
-- `src/lib/export/` – `exporter.ts` (off-screen OL map → compose canvases → mediabunny/WebCodecs → streamed file),
-  `videoSize.ts` (size, bitrate, frame count). Exporter is lazy-loaded.
+- `src/lib/export/` – `exporter.ts` (`exportPackage`: one pass, one frame state per frame drawn to every output –
+  map via off-screen OL map, components via `drawComponent`; WebCodecs/mediabunny; streamed to files;
+  `openPackageTargets` = folder picker or OPFS), `range.ts` (export range), `videoSize.ts`. Lazy-loaded.
+- `src/lib/components/components.ts` – data component videos (elevation, pace, HR, time, distance).
 - `src/lib/course/` – `course.ts` (model, legs, labels, edit helpers), `match.ts` (GPX↔course DP matching),
   `iofxml.ts` (IOF XML 3.0 CourseData), `routes.ts` (route choices per leg, by point ids). `src/lib/render/overprint.ts` – IOF course symbols (ISOM mm × px/mm).
 - `src/lib/gpx/edits.ts` (non-destructive `GpxEdit` list, spikes), `write.ts` (GPX writer).
@@ -61,7 +63,8 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
 - Sizes in `drawScene` are CSS px × `pixelRatio` so preview and any video resolution look the same.
 - Exports always stream to a file (`openExportTarget`): never build whole videos in memory (2 GB Blob limit hit at
   10 min 1080p).
-- Dev-only test hook: `window.__omv = { app, map() }` (MapStage). E2E deletes `showSaveFilePicker` → OPFS path.
+- Dev-only test hook: `window.__omv = { app, map(), forward }` (MapStage). E2E deletes `showSaveFilePicker` and
+  `showDirectoryPicker` → OPFS + download path; Playwright runs in Europe/Helsinki time.
 - `app.track` is DERIVED from `app.gpx` (original, never modified) + `app.gpxEdits` (+ `dragEdit` while dragging).
   Never assign `app.track`. Anything keyed to "a new GPX was loaded" must compare `app.gpx`, not `app.track`.
 - Undoable changes call `app.pushHistory()` first (snapshot of course, GPX edits, passing overrides).

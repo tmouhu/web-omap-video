@@ -71,7 +71,18 @@ Status per backlog issue (see `plan/`). ✅ done · 🟡 partial · ⬜ not star
 | STORY-31 Route display | ✅ | Appear with/after the turn, fade-in, visible time, fade-out or whole leg; upright labels "A · 640 m" with simple collision avoidance; included in the leg fit; exported (E2E checks route colour in video). **Missing:** per-leg display override, "shortest route" marker |
 | Preview | ✅ | "🎥 Video view" (default on): paused preview shows the exact video frame; data loads keep the fitted overview; editing tools switch to north-up |
 
+## EPIC-5 – Data component videos (in progress)
+
+| Issue | Status | Notes |
+| --- | --- | --- |
+| STORY-32 Component framework | ✅ | `drawComponent(ctx, cfg, data)` pure per frame; enable/size/style (background, text, accent, label, icon); live previews at the playhead in the Video tab; opaque output; unavailable data explained |
+| STORY-33 Elevation profile | ✅ | Smoothed profile over the export range by distance or time, completed part highlighted, position marker, control ticks, current elevation + total ascent. **Missing:** DEM elevation, current-leg-only profile |
+| STORY-34 Numeric components | ✅ | Pace (window), heart rate (zones → colour, deterministic heartbeat pulse), elapsed time (countdown or zero before start, optional leg time), elapsed distance (m < 1 km, km ≥ 1 km, optional leg distance); fixed-width digits so values do not jitter. **Missing:** pace sparkline, combined "dashboard" layout |
+| STORY-35 Export range | ✅ | Start → finish (default with a course), whole track, custom (typed times, ⇤/⇥ playhead, I / O keys), lead-in/out; green range bar on the timeline; GPX clock time of the first frame shown and saved |
+| STORY-36 Export package | ✅ | One pass, one frame state per frame drawn to every output; folder picked once (File System Access) with export.json, else OPFS temp files + per-file downloads; same range/fps/frame count for all (E2E checks durations). **Missing:** ZIP download, "re-export changed only" |
+
 ## Known issues
+- The bundled sample GPX has SYNTHETIC elevation and heart rate (for demos/tests).
 - MapAnt's own WMTS capabilities document points to the old `wmts.mapant.fi` host, whose redirect has no CORS header:
   a layer added from those capabilities shows "tiles not loading". The built-in MapAnt layer uses the correct URLs.
 - KML `LatLonBox` rotation is applied ground-conformally (lon scaled by cos φ). Verify against real OCAD/OOM KMZ exports.

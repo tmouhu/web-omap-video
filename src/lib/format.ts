@@ -35,3 +35,15 @@ export function formatClock(epochMs: number): string {
   const d = new Date(epochMs);
   return [d.getHours(), d.getMinutes(), d.getSeconds()].map((v) => String(v).padStart(2, '0')).join(':');
 }
+
+/** Parses "75", "1:15", "1:02:05" (optionally negative) into seconds; null when invalid. */
+export function parseDuration(text: string): number | null {
+  const s = text.trim();
+  const m = /^(-)?(\d+)(?::(\d{1,2}))?(?::(\d{1,2}))?(?:\.(\d+))?$/.exec(s);
+  if (!m) return null;
+  const parts = [m[2], m[3], m[4]].filter((x) => x !== undefined).map(Number);
+  if (parts.slice(1).some((p) => p >= 60)) return null;
+  let v = parts.reduce((acc, p) => acc * 60 + p, 0);
+  if (m[5]) v += Number(`0.${m[5]}`);
+  return m[1] ? -v : v;
+}

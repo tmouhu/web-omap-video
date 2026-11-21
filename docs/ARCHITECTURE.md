@@ -42,6 +42,12 @@ settings (scale, headingUp, lookAhead) ───┘        │  → { view{cente
   avoid overlaps. `viewAt(t)` = leg view (pan / approach zoom) or a blend (eased rotation, log-resolution, centre).
 - `FrameState.routeAlpha` drives route-choice visibility; `legStartT` drives "current leg" tails.
 
+## Export package (EPIC-5)
+- `exportPackage` renders frames n = 0…N−1 once: `fs = frameStateAt(t)`; the map lane renders the OL map + scene,
+  component lanes call `drawComponent(cfg, {track, t, range, origin, passings})`; every lane's `CanvasSource.add` uses
+  the same timestamp, so all files are frame-identical in time.
+- Range: `resolveRange` (course start→finish / track / custom + padding); `origin` = start passing for elapsed values.
+
 ## Coordinate systems
 - proj4 definitions in `lib/geo/crs.ts`, registered with OL in `lib/map/layers.ts` (`registerProjections`).
 - TM35 extent set to the MapAnt tile matrix extent `[-548576, 6291456, 1548576, 8388608]`.

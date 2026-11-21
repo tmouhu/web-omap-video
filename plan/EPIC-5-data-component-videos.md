@@ -1,6 +1,6 @@
 # EPIC-5: Data component videos
 
-**Type:** Epic · **Status:** New → in refinement · **Labels:** `video`, `components`
+**Type:** Epic · **Status:** In progress (Nov 2026) · **Labels:** `video`, `components`
 
 ## Summary
 Besides the map, produce **separate video files** from the GPX data: elevation profile, pace, heart rate, elapsed time and

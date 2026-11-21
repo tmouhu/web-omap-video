@@ -3,6 +3,7 @@
   import { app, ASPECTS, type InspectorTab } from '../state.svelte';
   import AnimationPanel from './AnimationPanel.svelte';
   import { courseProblems } from '../../lib/course/course';
+  import ComponentsPanel from './ComponentsPanel.svelte';
   import CoursePanel from './CoursePanel.svelte';
   import ExportPanel from './ExportPanel.svelte';
   import GpxPanel from './GpxPanel.svelte';
@@ -95,6 +96,7 @@
       <small class="muted">The video shows only the map, the route and the runner.</small>
     </section>
 
+    <ComponentsPanel />
     <ExportPanel />
   {/if}
 </aside>

@@ -17,7 +17,7 @@ type Hook = {
       ): { view: { center: number[]; rotation: number; resolution: number } };
     };
     exportShortSide: number;
-    exportFromStart: boolean;
+    exportRange: { mode: string; in: number; out: number };
     seek(t: number): void;
   };
   map(): { getView(): { getCenter(): number[]; getRotation(): number; getResolution(): number } };
@@ -120,8 +120,9 @@ test('exports a frame-exact MP4 with map tiles and downloads it', async ({ page 
   await page.getByTestId('resolution').selectOption('360');
   await page.evaluate(() => {
     const a = window.__omv.app;
-    a.exportFromStart = false;
-    a.seek(a.track!.duration - 20); // 20 s of track at 30× and 30 fps → exactly 20 frames
+    a.exportRange.mode = 'custom';
+    a.exportRange.in = a.track!.duration - 20; // 20 s of track at 30× and 30 fps → exactly 20 frames
+    a.exportRange.out = a.track!.duration;
   });
   await expect(page.getByTestId('export-summary')).toContainText('640 × 360');
   await expect(page.getByTestId('export-summary')).toContainText('20 frames');

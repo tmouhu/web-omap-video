@@ -108,10 +108,11 @@ test('route choices appear in the exported video while they are shown', async ({
     a.finishRoute();
     a.routeDisplay.hold = 20;
     a.style.track.tailMode = 'seconds';
-    a.exportFromStart = false;
     // Durations are video seconds: at 30× the turn into leg 1 settles (0.5 + 1.5) × 30 = 60 s after the
     // passing, and the 0.3 s fade-in takes another 9 s of track time.
-    a.seek(a.passings[1].t + 72);
+    a.exportRange.mode = 'custom';
+    a.exportRange.in = a.passings[1].t + 72;
+    a.exportRange.out = a.passings[1].t + 102;
   });
   await page.getByRole('button', { name: '30×' }).click();
   await page.getByTestId('tab-video').click();

@@ -9,6 +9,8 @@ import {
 } from '../lib/anim/timeline';
 import { legIndexOf, newRouteId, nextLabelAndColor, routesForLeg, type RouteChoice } from '../lib/course/routes';
 import type { ProjectScene } from '../lib/render/frameScene';
+import { defaultComponents, type ComponentConfig } from '../lib/components/components';
+import { DEFAULT_EXPORT_RANGE, resolveRange, type ExportRangeSettings, type ResolvedRange } from '../lib/export/range';
 import { forward, isKnownCrs, selectViewCrs, utmCrs, type CrsInfo } from '../lib/geo/crs';
 import type { LatLon } from '../lib/geo/geo';
 import {
@@ -55,15 +57,27 @@ export const SCALE_PRESETS = [2500, 4000, 5000, 7500, 10000, 15000, 25000, 50000
 export const SPEED_PRESETS = [0.5, 1, 2, 5, 10, 30];
 export const MIN_FRAME = { width: 160, height: 90 };
 
-export interface ExportResultView {
+export interface ExportFileView {
+  id: string;
+  /** 'map' or a component kind. */
+  kind: string;
+  label: string;
   url: string;
   file: File;
   name: string;
   savedToDisk: boolean;
+}
+
+export interface ExportResultView {
+  files: ExportFileView[];
   codec: string;
   frames: number;
   seconds: number;
   elapsedMs: number;
+  /** Folder the files were written to (File System Access), if any. */
+  folder: string | null;
+  /** GPX clock time of the first frame (epoch ms), for lining up with the head cam in the editor. */
+  firstFrameClock: number | null;
 }
 
 export interface GeorefPair {
@@ -213,7 +227,17 @@ class AppState {
   exportFps = $state(30);
   bitrateAuto = $state(true);
   bitrateMbps = $state(30);
-  exportFromStart = $state(true);
+  /** Export time range (STORY-35). */
+  exportRange = $state<ExportRangeSettings>({ ...DEFAULT_EXPORT_RANGE });
+  /** Include the map video in the export package. */
+  exportMap = $state(true);
+  /** Data component videos (STORY-32..34). */
+  components = $state<ComponentConfig[]>(defaultComponents());
+  range: ResolvedRange | null = $derived(
+    this.track
+      ? resolveRange($state.snapshot(this.exportRange), this.track, this.passings?.map((p) => p.t) ?? null)
+      : null,
+  );
   exporting = $state(false);
   exportProgress = $state({ done: 0, total: 0, startedAt: 0 });
   exportResult = $state.raw<ExportResultView | null>(null);
@@ -505,6 +529,31 @@ class AppState {
     this.restore(s);
     this.canUndo = true;
     this.canRedo = this.redoStack.length > 0;
+  }
+
+  /** Switches the export range to custom, starting from the current effective range. */
+  private ensureCustomRange(): void {
+    if (this.exportRange.mode === 'custom' || !this.range) return;
+    const pad = this.exportRange;
+    this.exportRange = {
+      ...pad,
+      mode: 'custom',
+      in: this.range.start + pad.padBefore,
+      out: this.range.end - pad.padAfter,
+    };
+  }
+
+  /** Sets the export range start/end to a track time (I / O keys, timeline handles). */
+  setRangeIn(t: number): void {
+    this.ensureCustomRange();
+    this.exportRange.in = Math.max(0, t);
+    if (this.exportRange.out <= this.exportRange.in) this.exportRange.out = this.track?.duration ?? t + 1;
+  }
+
+  setRangeOut(t: number): void {
+    this.ensureCustomRange();
+    this.exportRange.out = Math.min(this.track?.duration ?? t, t);
+    if (this.exportRange.in >= this.exportRange.out) this.exportRange.in = 0;
   }
 
   setInspectorTab(tab: InspectorTab): void {

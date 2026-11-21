@@ -53,6 +53,8 @@
     } else if (e.key === '.') app.seek(app.time + app.speed / app.exportFps);
     else if (e.key === ',') app.seek(app.time - app.speed / app.exportFps);
     else if (e.key === 'Home') app.seek(0);
+    else if (e.key === 'i' || e.key === 'I') app.setRangeIn(app.time);
+    else if (e.key === 'o' || e.key === 'O') app.setRangeOut(app.time);
     else if ((e.key === '[' || e.key === ']') && app.passings) {
       const ts = app.passings.map((p) => p.t);
       const t =
@@ -101,6 +103,19 @@
   </div>
 
   <div class="scrub" style:--p="{progress}%" bind:this={scrubEl}>
+    {#if app.range && duration > 0}
+      {@const a = Math.max(0, app.range.start)}
+      {@const b = Math.min(duration, app.range.end)}
+      <div
+        class="xrange"
+        title="Export range {formatDuration(app.range.start)} – {formatDuration(
+          app.range.end,
+        )} (I / O set it at the playhead)"
+        data-testid="export-range-bar"
+        style:left={pos(a)}
+        style:width="calc((100% - {2 * THUMB}px) * {(b - a) / duration})"
+      ></div>
+    {/if}
     {#if app.editRange[0] !== null && app.editRange[1] !== null}
       {@const a = Math.min(app.editRange[0], app.editRange[1])}
       {@const b = Math.max(app.editRange[0], app.editRange[1])}
@@ -246,6 +261,15 @@
   .mark.drag {
     background: var(--accent);
     color: #1a0d05;
+  }
+  .xrange {
+    position: absolute;
+    bottom: -3px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--ok);
+    opacity: 0.8;
+    pointer-events: none;
   }
   .range {
     position: absolute;

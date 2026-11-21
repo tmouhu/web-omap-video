@@ -114,8 +114,9 @@ test('the course is drawn into exported video frames', async ({ page }) => {
   await hook(page, (h) => {
     h.app.free.headingUp = false;
     h.app.free.scale = 25000;
-    h.app.exportFromStart = false;
-    h.app.seek(240);
+    h.app.exportRange.mode = 'custom';
+    h.app.exportRange.in = 240;
+    h.app.exportRange.out = 270;
   });
   await page.getByTestId('export').click();
   await expect(page.getByTestId('export-result')).toBeVisible({ timeout: 60_000 });

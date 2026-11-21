@@ -62,9 +62,10 @@ export async function stubTiles(page: Page): Promise<void> {
 export const test = base.extend({
   page: async ({ page }, use) => {
     await stubTiles(page);
-    // Force the download fallback: the native save dialog cannot be driven by Playwright.
+    // Force the download fallback: native save/folder dialogs cannot be driven by Playwright.
     await page.addInitScript(() => {
       delete (window as unknown as Record<string, unknown>).showSaveFilePicker;
+      delete (window as unknown as Record<string, unknown>).showDirectoryPicker;
     });
     await use(page);
   },
