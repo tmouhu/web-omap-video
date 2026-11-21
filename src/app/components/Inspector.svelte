@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte';
   /** Right-hand inspector: the panel of the selected workflow step (WorkflowRail, STORY-37). */
   import { app, ASPECTS } from '../state.svelte';
   import AnimationPanel from './AnimationPanel.svelte';
@@ -11,7 +12,7 @@
   import RoutePanel from './RoutePanel.svelte';
 </script>
 
-<aside class="inspector" aria-label="Settings">
+<aside class="inspector" aria-label={t('insp.label')}>
   {#if app.inspectorTab === 'map'}
     <MapPanel />
   {:else if app.inspectorTab === 'course'}
@@ -28,8 +29,8 @@
     <AnimationPanel />
 
     <section>
-      <header><h3>Frame</h3></header>
-      <div class="seg" role="group" aria-label="Aspect ratio">
+      <header><h3>{t('frame.title')}</h3></header>
+      <div class="seg" role="group" aria-label={t('frame.aspect')}>
         {#each ASPECTS as a (a.label)}
           <button
             aria-pressed={Math.abs(app.aspect - a.value) < 1e-6}
@@ -39,12 +40,12 @@
             {a.label}
           </button>
         {/each}
-        <button aria-pressed={!!app.frameCustom} disabled title="Drag the frame's corner to resize freely">Free</button>
+        <button aria-pressed={!!app.frameCustom} disabled title={t('frame.freeTitle')}>{t('frame.free')}</button>
       </div>
       <div class="size">
         <input
           type="number"
-          aria-label="Frame width (px)"
+          aria-label={t('frame.width')}
           data-testid="frame-width"
           min="160"
           value={app.frame.width}
@@ -54,7 +55,7 @@
         <span class="muted">×</span>
         <input
           type="number"
-          aria-label="Frame height (px)"
+          aria-label={t('frame.height')}
           data-testid="frame-height"
           min="90"
           value={app.frame.height}
@@ -64,16 +65,17 @@
         <span class="muted mono small">{(app.frame.width / Math.max(1, app.frame.height)).toFixed(3)}:1</span>
       </div>
       <small class="muted">
-        Drag the frame's corner to resize (Shift keeps the ratio). The video shows the same area.
+        {t('frame.help')}
       </small>
     </section>
 
     <section>
-      <header><h3>Overlays</h3></header>
+      <header><h3>{t('overlays.title')}</h3></header>
       <label class="check">
-        <input type="checkbox" bind:checked={app.style.showNorthArrow} disabled={app.locked} /> North arrow
+        <input type="checkbox" bind:checked={app.style.showNorthArrow} disabled={app.locked} />
+        {t('overlays.north')}
       </label>
-      <small class="muted">The video shows only the map, the route and the runner.</small>
+      <small class="muted">{t('overlays.help')}</small>
     </section>
   {/if}
 </aside>

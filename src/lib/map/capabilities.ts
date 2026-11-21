@@ -1,4 +1,5 @@
 /** WMS / WMTS GetCapabilities fetching and parsing for "Add layer" (STORY-17). */
+import { UserError } from '../i18n/core';
 import WMSCapabilities from 'ol/format/WMSCapabilities';
 import WMTSCapabilities from 'ol/format/WMTSCapabilities';
 import { newLayerId, type LayerDesc } from './layerModel';
@@ -36,10 +37,10 @@ function withParams(url: string, service: 'WMS' | 'WMTS'): string {
 export function parseCapabilities(xml: string, url: string): ServiceInfo {
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   const root = doc.documentElement?.localName ?? '';
-  if (doc.getElementsByTagName('parsererror').length) throw new Error('The response is not valid XML.');
+  if (doc.getElementsByTagName('parsererror').length) throw new UserError('err.capsNotXml');
   if (root === 'Capabilities') return parseWmts(xml, url);
   if (root === 'WMS_Capabilities' || root === 'WMT_MS_Capabilities') return parseWms(xml, url);
-  throw new Error(`Not a WMS or WMTS capabilities document (root element <${root}>).`);
+  throw new UserError('err.capsNotService', { root });
 }
 
 type Any = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -132,9 +133,5 @@ export async function fetchCapabilities(url: string): Promise<ServiceInfo> {
     }
   }
   const msg = (lastError as Error)?.message ?? 'unknown error';
-  throw new Error(
-    msg === 'Failed to fetch'
-      ? 'The service could not be reached, or it does not allow use from web apps (CORS). Such layers cannot be used.'
-      : `Could not read the service capabilities: ${msg}`,
-  );
+  throw msg === 'Failed to fetch' ? new UserError('err.capsUnreachable') : new UserError('err.capsRead', { msg });
 }

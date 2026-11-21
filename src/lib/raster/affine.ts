@@ -1,3 +1,4 @@
+import { UserError } from '../i18n/core';
 /**
  * Affine pixel → map transforms for raster maps (STORY-13/14).
  * Pixel coordinates use the CORNER convention: (0,0) is the top-left corner of the image,
@@ -15,7 +16,7 @@ export function apply(A: Affine, p: Pt): Pt {
 export function invert(A: Affine): Affine {
   const [a, b, c, d, e, f] = A;
   const det = a * e - b * d;
-  if (Math.abs(det) < 1e-18) throw new Error('Transform is not invertible');
+  if (Math.abs(det) < 1e-18) throw new UserError('err.notInvertible');
   return [e / det, -b / det, (b * f - c * e) / det, -d / det, a / det, (c * d - a * f) / det];
 }
 
@@ -52,7 +53,7 @@ function leastSquares(rows: number[][], rhs: number[]): number[] {
   for (let col = 0; col < n; col++) {
     let piv = col;
     for (let r = col + 1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
-    if (Math.abs(M[piv][col]) < 1e-12) throw new Error('Points are degenerate (e.g. all on one line)');
+    if (Math.abs(M[piv][col]) < 1e-12) throw new UserError('err.degeneratePoints');
     [M[col], M[piv]] = [M[piv], M[col]];
     for (let r = 0; r < n; r++) {
       if (r === col) continue;

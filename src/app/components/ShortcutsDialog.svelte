@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte';
   /** Keyboard shortcut cheat sheet (STORY-37), opened with "?". */
   import { app } from '../state.svelte';
 
@@ -7,44 +8,44 @@
     if (app.showShortcuts) dialog.showModal();
     else if (dialog.open) dialog.close();
   });
-  const groups: [string, [string, string][]][] = [
+  const groups: [string, [string, string][]][] = $derived([
     [
-      'Playback',
+      t('sc.playback'),
       [
-        ['Space', 'Play / pause'],
-        ['← / →', '1 s back / forward (Shift: 10 s)'],
-        [', / .', 'One frame back / forward'],
-        ['[ / ]', 'Previous / next control'],
-        ['Home', 'Back to the start'],
+        [t('sc.space'), t('sc.playPause')],
+        ['← / →', t('sc.seek')],
+        [', / .', t('sc.frame')],
+        ['[ / ]', t('sc.control')],
+        ['Home', t('sc.home')],
       ],
     ],
     [
-      'Export range',
+      t('sc.range'),
       [
-        ['I', 'Range starts at the playhead'],
-        ['O', 'Range ends at the playhead'],
+        ['I', t('sc.rangeIn')],
+        ['O', t('sc.rangeOut')],
       ],
     ],
     [
-      'Editing',
+      t('sc.editing'),
       [
-        ['⌘/Ctrl Z', 'Undo'],
-        ['⇧⌘/Ctrl Z', 'Redo'],
-        ['Delete', 'Remove the selected control / track point'],
-        ['Enter', 'Finish the course, route or redraw'],
-        ['Esc', 'Cancel / leave the tool'],
+        ['⌘/Ctrl Z', t('app.undo')],
+        ['⇧⌘/Ctrl Z', t('app.redo')],
+        ['Delete', t('sc.delete')],
+        ['Enter', t('sc.enter')],
+        ['Esc', t('sc.esc')],
       ],
     ],
     [
-      'Map',
+      t('sc.map'),
       [
-        ['Drag', 'Pan'],
-        ['Wheel', 'Zoom'],
-        ['Alt+Shift drag', 'Rotate'],
-        ['Frame corner', 'Resize the frame (Shift keeps the ratio)'],
+        [t('sc.drag'), t('sc.pan')],
+        [t('sc.wheel'), t('sc.zoom')],
+        [t('sc.rotateKey'), t('sc.rotate')],
+        [t('sc.corner'), t('sc.resize')],
       ],
     ],
-  ];
+  ]);
 </script>
 
 <dialog
@@ -54,8 +55,8 @@
   data-testid="shortcuts-dialog"
 >
   <header>
-    <h2 id="sc-title">Keyboard shortcuts</h2>
-    <button class="btn ghost icon" aria-label="Close" onclick={() => (app.showShortcuts = false)}>✕</button>
+    <h2 id="sc-title">{t('sc.title')}</h2>
+    <button class="btn ghost icon" aria-label={t('common.close')} onclick={() => (app.showShortcuts = false)}>✕</button>
   </header>
   <div class="cols">
     {#each groups as [title, rows] (title)}

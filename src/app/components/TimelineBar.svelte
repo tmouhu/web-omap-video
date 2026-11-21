@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, t as tr } from '../i18n.svelte';
   /** Bottom transport bar (STORY-3): play/pause, reset, scrubber, time, speed. */
   import { app, SPEED_PRESETS } from '../state.svelte';
   import { formatClock, formatDuration } from '../../lib/format';
@@ -66,12 +67,12 @@
 
 <svelte:window onkeydown={onKey} />
 
-<footer class="bar" aria-label="Playback">
+<footer class="bar" aria-label={t('tl.label')}>
   <div class="transport">
     <button
       class="btn icon ghost"
-      title="Back to start (Home)"
-      aria-label="Back to start"
+      title={t('tl.backTitle')}
+      aria-label={t('tl.back')}
       disabled={!app.track || app.exporting}
       onclick={() => {
         app.playing = false;
@@ -82,8 +83,8 @@
     </button>
     <button
       class="play"
-      title={app.playing ? 'Pause (Space)' : 'Play (Space)'}
-      aria-label={app.playing ? 'Pause' : 'Play'}
+      title={app.playing ? t('tl.pauseTitle') : t('tl.playTitle')}
+      aria-label={app.playing ? t('tl.pause') : t('tl.play')}
       data-testid="play"
       disabled={!app.track || app.exporting}
       onclick={() => app.togglePlay()}
@@ -108,9 +109,7 @@
       {@const b = Math.min(duration, app.range.end)}
       <div
         class="xrange"
-        title="Export range {formatDuration(app.range.start)} – {formatDuration(
-          app.range.end,
-        )} (I / O set it at the playhead)"
+        title={t('tl.rangeTitle', { from: formatDuration(app.range.start), to: formatDuration(app.range.end) })}
         data-testid="export-range-bar"
         style:left={pos(a)}
         style:width="calc((100% - {2 * THUMB}px) * {(b - a) / duration})"
@@ -133,7 +132,7 @@
             class="mark {p.status}"
             class:drag={dragging?.id === p.pointId}
             style:left={pos(t)}
-            title="{pointLabel(app.course, i)} · {formatDuration(t)} – drag to adjust"
+            title={tr('tl.markTitle', { label: pointLabel(app.course, i), time: formatDuration(t) })}
             data-testid="mark-{i}"
             onpointerdown={(e) => markerDown(e, p.pointId, p.t)}
             onpointermove={markerMove}
@@ -152,13 +151,13 @@
       step="0.1"
       value={app.time}
       disabled={!app.track || app.exporting}
-      aria-label="Timeline"
+      aria-label={tr('tl.timeline')}
       data-testid="timeline"
       oninput={(e) => app.seek(+(e.currentTarget as HTMLInputElement).value)}
     />
   </div>
 
-  <div class="clock mono muted" title="Clock time of the GPX at the playhead">
+  <div class="clock mono muted" title={tr('tl.clockTitle')}>
     {app.track?.startTime ? formatClock(app.track.startTime + app.time * 1000) : '--:--:--'}
   </div>
 
@@ -166,13 +165,13 @@
     class="btn sm vv"
     class:on={app.followFrame}
     aria-pressed={app.followFrame}
-    title="Video view: when paused, show exactly the video frame at the playhead (off: free north-up map)"
+    title={tr('tl.videoViewTitle')}
     data-testid="video-view"
     onclick={() => (app.followFrame = !app.followFrame)}
   >
-    🎥 Video view
+    {tr('tl.videoView')}
   </button>
-  <div class="seg" role="group" aria-label="Playback speed">
+  <div class="seg" role="group" aria-label={tr('tl.speed')}>
     {#each SPEED_PRESETS as s (s)}
       <button aria-pressed={app.speed === s} disabled={app.exporting} onclick={() => (app.speed = s)}>{s}×</button>
     {/each}

@@ -1,4 +1,5 @@
 /** KML/KMZ GroundOverlay georeferencing (OCAD, OOM, Livelox exports) – STORY-13. */
+import { UserError } from '../i18n/core';
 import { unzipSync, strFromU8 } from 'fflate';
 
 export interface GroundOverlay {
@@ -17,9 +18,9 @@ const num = (el: Element | undefined, name: string) => {
 /** Parses the first GroundOverlay (LatLonBox + rotation, or gx:LatLonQuad). */
 export function parseGroundOverlay(kml: string): GroundOverlay {
   const doc = new DOMParser().parseFromString(kml, 'application/xml');
-  if (doc.getElementsByTagName('parsererror').length) throw new Error('Invalid KML file.');
+  if (doc.getElementsByTagName('parsererror').length) throw new UserError('err.kmlInvalid');
   const go = doc.getElementsByTagNameNS('*', 'GroundOverlay')[0];
-  if (!go) throw new Error('The KML file has no GroundOverlay (no georeferenced image).');
+  if (!go) throw new UserError('err.kmlNoOverlay');
   const find = (root: Element, name: string) =>
     Array.from(root.getElementsByTagName('*')).find((n) => n.localName === name);
   const href = find(go, 'href')?.textContent?.trim() ?? '';
@@ -31,7 +32,7 @@ export function parseGroundOverlay(kml: string): GroundOverlay {
       .trim()
       .split(/\s+/)
       .map((t) => t.split(',').map(Number) as [number, number]);
-    if (pts.length < 4) throw new Error('Invalid gx:LatLonQuad.');
+    if (pts.length < 4) throw new UserError('err.kmlBadQuad');
     return { href, name, corners: [pts[3], pts[2], pts[1], pts[0]] };
   }
   const box = find(go, 'LatLonBox');
@@ -39,7 +40,7 @@ export function parseGroundOverlay(kml: string): GroundOverlay {
   const s = num(box, 'south');
   const e = num(box, 'east');
   const w = num(box, 'west');
-  if ([n, s, e, w].some((v) => !Number.isFinite(v))) throw new Error('GroundOverlay has no valid LatLonBox.');
+  if ([n, s, e, w].some((v) => !Number.isFinite(v))) throw new UserError('err.kmlBadBox');
   const rot = Number.isFinite(num(box, 'rotation')) ? num(box, 'rotation') : 0;
   // KML rotation: counter-clockwise degrees about the box centre, applied in lon/lat space
   // with the longitude axis scaled by cos(latitude) so the rotation is conformal on the ground.
@@ -59,13 +60,13 @@ export function parseGroundOverlay(kml: string): GroundOverlay {
 export function readKmz(data: Uint8Array): { overlay: GroundOverlay; image: Blob; imageName: string } {
   const files = unzipSync(data);
   const kmlName = Object.keys(files).find((f) => /\.kml$/i.test(f));
-  if (!kmlName) throw new Error('The KMZ file contains no KML document.');
+  if (!kmlName) throw new UserError('err.kmzNoKml');
   const overlay = parseGroundOverlay(strFromU8(files[kmlName]));
   const base = kmlName.includes('/') ? kmlName.slice(0, kmlName.lastIndexOf('/') + 1) : '';
   const key =
     [overlay.href, base + overlay.href].find((k) => k && files[k]) ??
     Object.keys(files).find((f) => /\.(jpe?g|png|gif|webp)$/i.test(f));
-  if (!key) throw new Error(`The image "${overlay.href}" is missing from the KMZ file.`);
+  if (!key) throw new UserError('err.kmzNoImage', { name: overlay.href });
   const ext = key.split('.').pop()!.toLowerCase();
   const type = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
   return { overlay, image: new Blob([files[key] as BlobPart], { type }), imageName: key };

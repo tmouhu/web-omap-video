@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte';
   /**
    * Central map stage: the preview frame (exact video framing, freely resizable), the OpenLayers layer
    * stack from `app.layers`, the scene overlay canvas, drag-and-drop of GPX/map files, map clicks for
@@ -542,7 +543,7 @@
   class="stage"
   bind:this={stageEl}
   role="region"
-  aria-label="Map preview"
+  aria-label={t('stage.label')}
   ondragover={(e) => {
     e.preventDefault();
     dragging = true;
@@ -566,21 +567,14 @@
     {#if !app.track && !app.raster}
       <div class="empty">
         <div class="card">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-            <path d="M4 18c3-6 6 2 9-4s4-7 7-6" stroke-linecap="round" /><circle cx="4" cy="18" r="1.6" /><path
-              d="m18 4 2 2-2 2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          <h2>Drop a GPX file or a map image</h2>
+          <img src="{import.meta.env.BASE_URL}icon-128.png" alt="" width="56" height="56" class="logo" />
+          <h2>{t('stage.dropTitle')}</h2>
           <p>
-            GPX tracks, orienteering map images (JPG/PNG + world file) or KMZ. Files are processed on this device and
-            never uploaded.
+            {t('stage.dropText')}
           </p>
           <div class="row">
             <label class="btn primary">
-              Choose files…
+              {t('stage.choose')}
               <input
                 type="file"
                 multiple
@@ -592,25 +586,27 @@
                 }}
               />
             </label>
-            <button class="btn" onclick={() => app.loadSample()} data-testid="load-sample">Load sample GPX</button>
+            <button class="btn" onclick={() => app.loadSample()} data-testid="load-sample">
+              {t('stage.sampleGpx')}
+            </button>
           </div>
           <div class="row">
-            <button class="btn ghost" onclick={() => (app.showProjects = true)}>My projects…</button>
+            <button class="btn ghost" onclick={() => (app.showProjects = true)}>{t('stage.myProjects')}</button>
             <button class="btn ghost" onclick={() => app.loadSampleProject()} data-testid="load-sample-project">
-              Sample project
+              {t('stage.sampleProject')}
             </button>
           </div>
           {#if app.error}<p class="error" role="alert">{app.error}</p>{/if}
         </div>
       </div>
     {/if}
-    {#if dragging}<div class="dropzone">Drop GPX or map files</div>{/if}
+    {#if dragging}<div class="dropzone">{t('stage.dropzone')}</div>{/if}
     {#if app.georef.active}
       <div class="georef-hint" data-testid="georef-hint">
         {#if app.georef.pendingPixel}
-          <b>Step 2:</b> click the true position of that point on the background map
+          {@html t('stage.georefStep2')}
         {:else}
-          <b>Step 1:</b> click a distinctive point on your map image (e.g. a path crossing)
+          {@html t('stage.georefStep1')}
         {/if}
       </div>
     {/if}
@@ -618,8 +614,8 @@
       <div
         class="resize"
         role="separator"
-        aria-label="Resize frame (Shift keeps aspect ratio)"
-        title="Drag to resize · Shift keeps the aspect ratio"
+        aria-label={t('stage.resize')}
+        title={t('stage.resizeTitle')}
         data-testid="frame-resize"
         onpointerdown={onResizeDown}
         onpointermove={onResizeMove}
@@ -631,7 +627,7 @@
   <div class="frame-caption mono">
     {app.frame.width} × {app.frame.height} px · {app.crs.name}{scaleText ? ` · ${scaleText}` : ''}
     {#if cursor}<span data-testid="cursor">· {cursor.lat.toFixed(5)}° N {cursor.lon.toFixed(5)}° E</span>{/if}
-    {#if app.exporting}<span class="lock">● Exporting – frame locked</span>{/if}
+    {#if app.exporting}<span class="lock">{t('stage.exporting')}</span>{/if}
   </div>
 </div>
 
@@ -738,8 +734,10 @@
     max-width: 420px;
     color: var(--text);
   }
-  .card svg {
-    color: var(--accent);
+  .card .logo {
+    border-radius: 12px;
+    display: block;
+    margin: 0 auto 4px;
   }
   .card h2 {
     margin: 8px 0 4px;

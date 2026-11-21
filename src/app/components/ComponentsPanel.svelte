@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte';
+  import { LOCALES } from '../../lib/i18n/core';
   /** Data component videos (STORY-32..34): enable, size, style, kind options, live preview at the playhead. */
   import { app } from '../state.svelte';
   import { COMPONENT_META, drawComponent, isAvailable, type ComponentConfig } from '../../lib/components/components';
@@ -11,6 +13,7 @@
     const r = app.range;
     const t = app.time;
     const passings = app.passings?.map((p) => p.t) ?? null;
+    void app.videoLocale;
     const cfgs = $state.snapshot(app.components) as ComponentConfig[];
     if (!track || !r) return;
     for (const cfg of cfgs) {
@@ -25,6 +28,7 @@
         rangeEnd: r.end,
         origin: r.origin,
         passings,
+        locale: app.videoLocale,
       });
     }
   });
@@ -41,13 +45,16 @@
 
 <section class="section" data-testid="components-panel">
   <div class="sec-head">
-    <h3 class="sec-title">Data videos</h3>
-    <span class="tag">{app.components.filter((c) => c.enabled).length} on</span>
+    <h3 class="sec-title">{t('dv.title')}</h3>
+    <span class="tag">{t('dv.on', { n: app.components.filter((c) => c.enabled).length })}</span>
   </div>
-  <p class="small muted">
-    Separate videos exported together with the map, frame by frame in sync. Place them over your head cam footage in
-    your editor.
-  </p>
+  <p class="small muted">{t('dv.intro')}</p>
+  <label class="field">
+    <span>{t('dv.videoLang')}</span>
+    <select bind:value={app.videoLocale} disabled={app.locked} data-testid="video-language">
+      {#each LOCALES as l (l.id)}<option value={l.id}>{l.name}</option>{/each}
+    </select>
+  </label>
   {#each app.components as c (c.kind)}
     {@const available = isAvailable(c.kind, app.track)}
     <div class="comp" class:on={c.enabled && available}>
@@ -58,62 +65,77 @@
           disabled={!available || app.locked}
           data-testid="comp-{c.kind}"
         />
-        <span class="name">{COMPONENT_META[c.kind].label}</span>
+        <span class="name">{t(`comp.${c.kind}`)}</span>
         {#if !available}
           <span class="muted small">
-            {app.track
-              ? `no ${COMPONENT_META[c.kind].needs === 'heartRate' ? 'heart rate' : 'elevation'} in the GPX`
-              : ''}
+            {app.track ? (COMPONENT_META[c.kind].needs === 'heartRate' ? t('dv.noHr') : t('dv.noEle')) : ''}
           </span>
         {/if}
       </label>
       {#if c.enabled && available}
         <canvas class="preview" bind:this={canvases[c.kind]} data-testid="comp-preview-{c.kind}"></canvas>
         <details>
-          <summary class="small muted">Size and style</summary>
+          <summary class="small muted">{t('dv.sizeStyle')}</summary>
           <div class="opts">
             <div class="size">
-              <input type="number" min="80" max="3840" bind:value={c.width} aria-label="Width" disabled={app.locked} />
+              <input
+                type="number"
+                min="80"
+                max="3840"
+                bind:value={c.width}
+                aria-label={t('dv.width')}
+                disabled={app.locked}
+              />
               <span class="muted">×</span>
               <input
                 type="number"
                 min="40"
                 max="2160"
                 bind:value={c.height}
-                aria-label="Height"
+                aria-label={t('dv.height')}
                 disabled={app.locked}
               />
               <span class="muted small">px</span>
             </div>
             <div class="colors">
               <label>
-                <span class="small muted">Background</span><input type="color" bind:value={c.style.background} />
+                <span class="small muted">{t('dv.background')}</span><input
+                  type="color"
+                  bind:value={c.style.background}
+                />
               </label>
-              <label><span class="small muted">Text</span><input type="color" bind:value={c.style.text} /></label>
-              <label><span class="small muted">Accent</span><input type="color" bind:value={c.style.accent} /></label>
+              <label>
+                <span class="small muted">{t('dv.text')}</span><input type="color" bind:value={c.style.text} />
+              </label>
+              <label>
+                <span class="small muted">{t('dv.accent')}</span><input type="color" bind:value={c.style.accent} />
+              </label>
             </div>
-            <label class="check"><input type="checkbox" bind:checked={c.style.showLabel} /> Label</label>
+            <label class="check"><input type="checkbox" bind:checked={c.style.showLabel} /> {t('dv.label')}</label>
             {#if c.kind !== 'elevation'}
-              <label class="check"><input type="checkbox" bind:checked={c.style.showIcon} /> Icon</label>
+              <label class="check"><input type="checkbox" bind:checked={c.style.showIcon} /> {t('dv.icon')}</label>
             {/if}
             {#if c.kind === 'elevation'}
-              <div class="seg" role="group" aria-label="X axis">
+              <div class="seg" role="group" aria-label={t('dv.xAxis')}>
                 <button aria-pressed={c.options.xAxis === 'distance'} onclick={() => (c.options.xAxis = 'distance')}>
-                  By distance
+                  {t('dv.byDistance')}
                 </button>
                 <button aria-pressed={c.options.xAxis === 'time'} onclick={() => (c.options.xAxis = 'time')}>
-                  By time
+                  {t('dv.byTime')}
                 </button>
               </div>
-              <label class="check"><input type="checkbox" bind:checked={c.options.showControls} /> Control marks</label>
+              <label class="check">
+                <input type="checkbox" bind:checked={c.options.showControls} />
+                {t('dv.controlMarks')}
+              </label>
             {:else if c.kind === 'pace'}
               <label class="field">
-                <span>Smoothing · {c.options.paceWindow} s</span>
+                <span>{t('dv.smoothing', { s: c.options.paceWindow })}</span>
                 <input type="range" min="3" max="30" step="1" bind:value={c.options.paceWindow} />
               </label>
             {:else if c.kind === 'heartRate'}
               <label class="field">
-                <span>Zone limits (bpm)</span>
+                <span>{t('dv.zones')}</span>
                 <input
                   type="text"
                   value={c.options.hrZones.join(', ')}
@@ -122,7 +144,8 @@
               </label>
             {:else if c.kind === 'time'}
               <label class="check">
-                <input type="checkbox" bind:checked={c.options.showControls} /> Also show the leg time
+                <input type="checkbox" bind:checked={c.options.showControls} />
+                {t('dv.legTime')}
               </label>
               <label class="check">
                 <input
@@ -131,11 +154,12 @@
                   onchange={(e) =>
                     (c.options.beforeStart = (e.currentTarget as HTMLInputElement).checked ? 'countdown' : 'zero')}
                 />
-                Count down before the start
+                {t('dv.countdown')}
               </label>
             {:else if c.kind === 'distance'}
               <label class="check">
-                <input type="checkbox" bind:checked={c.options.showControls} /> Also show the leg distance
+                <input type="checkbox" bind:checked={c.options.showControls} />
+                {t('dv.legDistance')}
               </label>
             {/if}
           </div>

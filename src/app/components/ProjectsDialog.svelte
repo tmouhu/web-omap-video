@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { i18n, t } from '../i18n.svelte';
   /** Start screen / project library (STORY-37/38): recent projects, new, open file, sample. */
   import { app } from '../state.svelte';
   import {
@@ -22,7 +23,9 @@
     items = await listAll().catch(() => []);
     const s = await storageInfo().catch(() => null);
     if (s && s.quota)
-      usage = `${(s.usage / 1e6).toFixed(0)} MB of ${(s.quota / 1e9).toFixed(1)} GB used${s.persisted ? ' · kept by the browser' : ''}`;
+      usage =
+        t('proj.usage', { used: (s.usage / 1e6).toFixed(0), quota: (s.quota / 1e9).toFixed(1) }) +
+        (s.persisted ? t('proj.kept') : '');
   }
 
   $effect(() => {
@@ -32,8 +35,22 @@
     } else if (dialog.open) dialog.close();
   });
 
+  function summary(c: ProjectListItem['counts']): string {
+    const parts: string[] = [];
+    if (c.points) parts.push(t('proj.points', { n: c.points.toLocaleString(i18n.locale === 'fi' ? 'fi' : 'en') }));
+    if (c.controls) parts.push(t('proj.controls', { n: c.controls }));
+    if (c.raster) parts.push(t('proj.map'));
+    if (c.routes) parts.push(t('proj.routes', { n: c.routes }));
+    return parts.join(' · ') || t('proj.emptySummary');
+  }
+
   const fmt = (ms: number) =>
-    new Date(ms).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    new Date(ms).toLocaleString(i18n.locale === 'fi' ? 'fi' : 'en', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 </script>
 
 <dialog
@@ -43,13 +60,16 @@
   data-testid="projects-dialog"
 >
   <header>
-    <h2 id="projects-title">Projects</h2>
-    <button class="btn ghost icon" aria-label="Close" onclick={() => (app.showProjects = false)}>✕</button>
+    <h2 id="projects-title">
+      <img src="{import.meta.env.BASE_URL}icon-128.png" alt="" width="32" height="32" class="logo" />
+      {t('proj.title')}
+    </h2>
+    <button class="btn ghost icon" aria-label={t('common.close')} onclick={() => (app.showProjects = false)}>✕</button>
   </header>
   <div class="actions">
-    <button class="btn primary" onclick={() => newProject()} data-testid="project-new">New project</button>
+    <button class="btn primary" onclick={() => newProject()} data-testid="project-new">{t('proj.new')}</button>
     <label class="btn">
-      Open project file…
+      {t('proj.openFile')}
       <input
         type="file"
         accept=".omvproj"
@@ -69,15 +89,11 @@
       }}
       data-testid="project-sample"
     >
-      Open sample project
+      {t('proj.sample')}
     </button>
     {#if app.raster}
-      <button
-        class="btn ghost"
-        onclick={() => newFromCurrent()}
-        title="Keep the map, layers and style; start without GPX and course"
-      >
-        New from this map
+      <button class="btn ghost" onclick={() => newFromCurrent()} title={t('proj.newFromMapTitle')}>
+        {t('proj.newFromMap')}
       </button>
     {/if}
   </div>
@@ -85,24 +101,24 @@
     <ul class="list" data-testid="project-list">
       {#each items as p (p.id)}
         <li class:current={p.id === app.projectId}>
-          <button class="open" onclick={() => openProject(p.id)} aria-label="Open {p.name}">
+          <button class="open" onclick={() => openProject(p.id)} aria-label={t('proj.openNamed', { name: p.name })}>
             {#if p.thumbnail}<img src={p.thumbnail} alt="" />{:else}<div class="ph"></div>{/if}
           </button>
           <div class="meta">
             <input
               type="text"
               value={p.name}
-              aria-label="Project name"
+              aria-label={t('app.projectName')}
               onchange={async (e) => {
                 await rename(p.id, (e.currentTarget as HTMLInputElement).value.trim() || p.name);
                 await refresh();
               }}
             />
-            <span class="small muted">{p.summary}</span>
-            <span class="small muted">{fmt(p.modified)}{p.id === app.projectId ? ' · open now' : ''}</span>
+            <span class="small muted">{summary(p.counts)}</span>
+            <span class="small muted">{fmt(p.modified)}{p.id === app.projectId ? t('proj.openNow') : ''}</span>
           </div>
           <div class="btns">
-            <button class="btn sm" onclick={() => openProject(p.id)}>Open</button>
+            <button class="btn sm" onclick={() => openProject(p.id)}>{t('proj.open')}</button>
             {#if confirmDelete === p.id}
               <button
                 class="btn sm danger"
@@ -112,11 +128,15 @@
                   await refresh();
                 }}
               >
-                Delete for good
+                {t('proj.deleteForGood')}
               </button>
             {:else}
-              <button class="btn sm ghost" onclick={() => (confirmDelete = p.id)} aria-label="Delete {p.name}">
-                Delete
+              <button
+                class="btn sm ghost"
+                onclick={() => (confirmDelete = p.id)}
+                aria-label={t('proj.deleteNamed', { name: p.name })}
+              >
+                {t('proj.delete')}
               </button>
             {/if}
           </div>
@@ -125,13 +145,11 @@
     </ul>
   {:else}
     <p class="muted empty">
-      No saved projects yet. Your work is saved automatically in this browser as soon as you add a GPX, a map or a
-      course.
+      {t('proj.empty')}
     </p>
   {/if}
   <footer class="small muted">
-    Projects are stored only in this browser{usage ? ` (${usage})` : ''}. Use “Save project file” to back up or move
-    them.
+    {t('proj.footer', { usage: usage ? ` (${usage})` : '' })}
   </footer>
 </dialog>
 
@@ -162,6 +180,12 @@
   h2 {
     margin: 0;
     font-size: 19px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo {
+    border-radius: 8px;
   }
   .actions {
     display: flex;

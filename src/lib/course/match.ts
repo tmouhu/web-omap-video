@@ -1,3 +1,4 @@
+import type { MsgKey } from '../i18n/core';
 /**
  * GPX ↔ course matching (STORY-22/23).
  *
@@ -178,13 +179,13 @@ export function matchCourse(track: Track, course: Course, opts: MatchOptions = {
   return result;
 }
 
-/** Checks that manual times keep the course order; returns an error message or null. */
-export function validateOverride(course: Course, passings: Passing[], pointId: string, t: number): string | null {
+/** Checks that manual times keep the course order; returns an error message key or null. */
+export function validateOverride(course: Course, passings: Passing[], pointId: string, t: number): MsgKey | null {
   const k = course.points.findIndex((p) => p.id === pointId);
-  if (k < 0) return 'Unknown control.';
+  if (k < 0) return 'match.unknown';
   const prev = passings[k - 1];
   const next = passings[k + 1];
-  if (prev && t <= prev.t && prev.status === 'manual') return 'The time must be after the previous control.';
-  if (next && t >= next.t && next.status === 'manual') return 'The time must be before the next control.';
+  if (prev && t <= prev.t && prev.status === 'manual') return 'match.afterPrev';
+  if (next && t >= next.t && next.status === 'manual') return 'match.beforeNext';
   return null;
 }

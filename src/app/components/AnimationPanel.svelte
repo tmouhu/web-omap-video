@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte';
   /** Camera (free mode / leg-by-leg course mode, STORY-24..27) and runner + tail style (STORY-28/29). */
   import { app, SCALE_PRESETS } from '../state.svelte';
   import { courseProblems } from '../../lib/course/course';
@@ -17,22 +18,22 @@
 
 <section class="section" data-testid="camera-panel">
   <div class="sec-head">
-    <h3 class="sec-title">Camera</h3>
-    <span class="tag" data-testid="camera-mode">{app.courseMode ? 'Leg by leg' : 'Free'}</span>
+    <h3 class="sec-title">{t('cam.title')}</h3>
+    <span class="tag" data-testid="camera-mode">{app.courseMode ? t('cam.legByLeg') : t('cam.free')}</span>
   </div>
   {#if courseReady}
     <label class="check">
       <input type="checkbox" bind:checked={app.courseModeEnabled} disabled={app.locked} data-testid="course-mode" />
-      Leg-by-leg camera: each leg turned so its target is up
+      {t('cam.courseMode')}
     </label>
   {:else}
-    <p class="small muted">Set a course and load a GPX to use the leg-by-leg camera.</p>
+    <p class="small muted">{t('cam.needCourse')}</p>
   {/if}
 
   {#if app.courseMode}
     <div class="grid2">
       <label class="field">
-        <span>Zoom-in limit</span>
+        <span>{t('cam.zoomIn')}</span>
         <div class="scale">
           <span class="mono muted">1:</span>
           <input
@@ -47,7 +48,7 @@
         </div>
       </label>
       <label class="field">
-        <span>Zoom-out limit</span>
+        <span>{t('cam.zoomOut')}</span>
         <div class="scale">
           <span class="mono muted">1:</span>
           <input
@@ -62,53 +63,49 @@
         </div>
       </label>
     </div>
-    <small class="muted">Legs too long for the zoom-out limit pan along with the runner.</small>
+    <small class="muted">{t('cam.panHelp')}</small>
     <label class="field">
-      <span>Turn duration · {cam.transitionDuration.toFixed(1)} s</span>
+      <span>{t('cam.turnDuration', { s: cam.transitionDuration.toFixed(1) })}</span>
       <input type="range" min="0.3" max="4" step="0.1" bind:value={cam.transitionDuration} disabled={app.locked} />
     </label>
     {#if advanced}
       <label class="field">
-        <span>Margin around the leg · {Math.round(cam.marginFraction * 100)} %</span>
+        <span>{t('cam.margin', { pct: Math.round(cam.marginFraction * 100) })}</span>
         <input type="range" min="0" max="0.2" step="0.01" bind:value={cam.marginFraction} disabled={app.locked} />
       </label>
       <label class="field">
         <span>
-          Turn starts · {cam.transitionDelay >= 0 ? '+' : ''}{cam.transitionDelay.toFixed(1)} s after the punch
+          {t('cam.turnStarts', { s: (cam.transitionDelay >= 0 ? '+' : '') + cam.transitionDelay.toFixed(1) })}
         </span>
         <input type="range" min="-2" max="3" step="0.1" bind:value={cam.transitionDelay} disabled={app.locked} />
       </label>
-      <div class="seg" role="group" aria-label="Easing">
-        {#each [['sine', 'Smooth'], ['cubic', 'Snappy'], ['linear', 'Linear']] as [v, l] (v)}
-          <button
-            aria-pressed={cam.easing === v}
-            disabled={app.locked}
-            onclick={() => (cam.easing = v as typeof cam.easing)}
-          >
-            {l}
+      <div class="seg" role="group" aria-label={t('cam.easing')}>
+        {#each ['sine', 'cubic', 'linear'] as const as v (v)}
+          <button aria-pressed={cam.easing === v} disabled={app.locked} onclick={() => (cam.easing = v)}>
+            {t(`ease.${v}`)}
           </button>
         {/each}
       </div>
       <label class="field">
-        <span>After the finish</span>
+        <span>{t('cam.afterFinish')}</span>
         <select bind:value={cam.afterFinish} disabled={app.locked}>
-          <option value="hold">Keep the last leg</option>
-          <option value="overview">Zoom out to the whole course</option>
+          <option value="hold">{t('cam.hold')}</option>
+          <option value="overview">{t('cam.overview')}</option>
         </select>
       </label>
     {/if}
     <label class="check">
       <input type="checkbox" bind:checked={cam.approachEnabled} disabled={app.locked} data-testid="approach" />
-      Zoom in when approaching the control
+      {t('cam.approach')}
     </label>
     {#if cam.approachEnabled}
       <div class="grid2">
         <label class="field">
-          <span>Starts · {cam.approachSeconds} s before</span>
+          <span>{t('cam.approachStarts', { s: cam.approachSeconds })}</span>
           <input type="range" min="3" max="40" step="1" bind:value={cam.approachSeconds} disabled={app.locked} />
         </label>
         <label class="field">
-          <span>Zoom to</span>
+          <span>{t('cam.zoomTo')}</span>
           <div class="scale">
             <span class="mono muted">1:</span>
             <input
@@ -129,11 +126,11 @@
       aria-expanded={advanced}
       data-testid="camera-advanced"
     >
-      {advanced ? 'Fewer settings' : 'More settings…'}
+      {advanced ? t('cam.fewer') : t('cam.more')}
     </button>
   {:else}
     <div class="field">
-      <span>Map scale</span>
+      <span>{t('cam.scale')}</span>
       <div class="scale3">
         <span class="mono muted">1:</span>
         <input
@@ -150,7 +147,7 @@
           }}
         />
         <select
-          aria-label="Scale presets"
+          aria-label={t('cam.presets')}
           disabled={app.locked}
           value=""
           onchange={(e) => {
@@ -159,65 +156,75 @@
             (e.currentTarget as HTMLSelectElement).value = '';
           }}
         >
-          <option value="">Presets</option>
+          <option value="">{t('cam.presetsOption')}</option>
           {#each SCALE_PRESETS as s (s)}<option value={s}>1:{s.toLocaleString('en')}</option>{/each}
         </select>
       </div>
-      <small class="muted">At 96 px per inch on the preview frame.</small>
+      <small class="muted">{t('cam.dpiHelp')}</small>
     </div>
     <label class="check">
-      <input type="checkbox" bind:checked={app.free.headingUp} disabled={app.locked} /> Heading up while playing
+      <input type="checkbox" bind:checked={app.free.headingUp} disabled={app.locked} />
+      {t('cam.headingUp')}
     </label>
     <label class="field">
-      <span>Look-ahead · {Math.round(app.free.lookAhead * 100)} % below centre</span>
+      <span>{t('cam.lookAhead', { pct: Math.round(app.free.lookAhead * 100) })}</span>
       <input type="range" min="0" max="0.4" step="0.05" bind:value={app.free.lookAhead} disabled={app.locked} />
     </label>
   {/if}
 </section>
 
 <section class="section" data-testid="runner-panel">
-  <div class="sec-head"><h3 class="sec-title">Runner and tail</h3></div>
-  <div class="seg" role="group" aria-label="Tail length">
-    <button aria-pressed={st.tailMode === 'seconds'} onclick={() => (st.tailMode = 'seconds')}>Seconds</button>
-    <button aria-pressed={st.tailMode === 'leg'} onclick={() => (st.tailMode = 'leg')} disabled={!app.courseMode}>
-      Current leg
+  <div class="sec-head"><h3 class="sec-title">{t('run.title')}</h3></div>
+  <div class="seg" role="group" aria-label={t('run.tailLength')}>
+    <button aria-pressed={st.tailMode === 'seconds'} onclick={() => (st.tailMode = 'seconds')}>
+      {t('run.seconds')}
     </button>
-    <button aria-pressed={st.tailMode === 'all'} onclick={() => (st.tailMode = 'all')}>Whole route</button>
+    <button aria-pressed={st.tailMode === 'leg'} onclick={() => (st.tailMode = 'leg')} disabled={!app.courseMode}>
+      {t('run.leg')}
+    </button>
+    <button aria-pressed={st.tailMode === 'all'} onclick={() => (st.tailMode = 'all')}>{t('run.all')}</button>
   </div>
   {#if st.tailMode === 'seconds'}
     <label class="field">
-      <span>Tail length · {st.tailSeconds} s</span>
+      <span>{t('run.tailSeconds', { s: st.tailSeconds })}</span>
       <input type="range" min="5" max="300" step="5" bind:value={st.tailSeconds} data-testid="tail-seconds" />
     </label>
   {/if}
-  <div class="seg" role="group" aria-label="Tail colour">
+  <div class="seg" role="group" aria-label={t('run.tailColour')}>
     <button aria-pressed={st.colorMode === 'pace'} onclick={() => (st.colorMode = 'pace')} data-testid="tail-pace">
-      By pace
+      {t('run.byPace')}
     </button>
-    <button aria-pressed={st.colorMode === 'single'} onclick={() => (st.colorMode = 'single')}>Single colour</button>
+    <button aria-pressed={st.colorMode === 'single'} onclick={() => (st.colorMode = 'single')}>
+      {t('run.single')}
+    </button>
   </div>
   {#if st.colorMode === 'pace'}
     <div class="legend small">
-      <span class="grad"></span><span class="muted">faster · your median pace · slower/stopped</span>
+      <span class="grad"></span><span class="muted">{t('run.legend')}</span>
     </div>
   {:else}
-    <label class="row"><span class="small">Tail colour</span><input type="color" bind:value={st.color} /></label>
+    <label class="row">
+      <span class="small">{t('run.tailColour')}</span><input type="color" bind:value={st.color} />
+    </label>
   {/if}
   <label class="field">
-    <span>Line width · {st.width.toFixed(1)} px</span>
+    <span>{t('run.width', { px: st.width.toFixed(1) })}</span>
     <input type="range" min="2" max="9" step="0.5" bind:value={st.width} />
   </label>
-  <label class="check"><input type="checkbox" bind:checked={st.fade} /> Fade the end of the tail</label>
+  <label class="check"><input type="checkbox" bind:checked={st.fade} /> {t('run.fade')}</label>
   <label class="check">
-    <input type="checkbox" bind:checked={st.showTravelled} /> Show the route already run (faint)
+    <input type="checkbox" bind:checked={st.showTravelled} />
+    {t('run.travelled')}
   </label>
-  <label class="check"><input type="checkbox" bind:checked={st.showFuture} /> Show the route still to come</label>
+  <label class="check"><input type="checkbox" bind:checked={st.showFuture} /> {t('run.future')}</label>
   <div class="grid2">
     <label class="field">
-      <span>Arrow size · {st.arrowSize} px</span>
+      <span>{t('run.arrowSize', { px: st.arrowSize })}</span>
       <input type="range" min="8" max="24" step="1" bind:value={st.arrowSize} />
     </label>
-    <label class="row"><span class="small">Arrow colour</span><input type="color" bind:value={st.arrowColor} /></label>
+    <label class="row">
+      <span class="small">{t('run.arrowColour')}</span><input type="color" bind:value={st.arrowColor} />
+    </label>
   </div>
 </section>
 

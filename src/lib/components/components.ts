@@ -5,6 +5,7 @@
  * product decision). Drawn directly at the output pixel size.
  */
 import { formatDistance, formatDuration } from '../format';
+import { decimalSep, translate, type MsgKey, type Params, type VideoLocale } from '../i18n/core';
 import type { Track } from '../track/track';
 
 export type ComponentKind = 'elevation' | 'pace' | 'heartRate' | 'time' | 'distance';
@@ -91,7 +92,11 @@ export interface ComponentData {
   origin: number;
   /** Passing times of course points (for control ticks and leg values), if any. */
   passings: number[] | null;
+  /** Language of the texts in the video (labels, decimal separator). Default English. */
+  locale?: VideoLocale;
 }
+
+const L = (d: ComponentData, key: MsgKey, params?: Params) => translate(d.locale ?? 'en', key, params);
 
 export function isAvailable(kind: ComponentKind, track: Track | null): boolean {
   const need = COMPONENT_META[kind].needs;
@@ -110,7 +115,7 @@ export function elapsedTimeText(d: ComponentData, o: ComponentOptions): string {
 
 export function elapsedDistanceText(d: ComponentData): string {
   const m = d.track.positionAt(d.t).d - d.track.positionAt(Math.max(d.origin, 0)).d;
-  return formatDistance(Math.max(0, m));
+  return formatDistance(Math.max(0, m), decimalSep(d.locale ?? 'en'));
 }
 
 /** Current leg: [start passing, next passing] containing t, else null. */
@@ -341,12 +346,12 @@ export function drawComponent(ctx: CanvasRenderingContext2D, cfg: ComponentConfi
         w,
         h,
         s,
-        'Time',
+        L(d, 'vid.time'),
         elapsedTimeText(d, o),
         '',
         iconClock(ctx, s.accent),
         s.text,
-        leg ? `leg ${formatDuration(d.t - leg[0])}` : undefined,
+        leg ? L(d, 'vid.leg', { value: formatDuration(d.t - leg[0]) }) : undefined,
       );
       break;
     }
@@ -359,19 +364,19 @@ export function drawComponent(ctx: CanvasRenderingContext2D, cfg: ComponentConfi
         w,
         h,
         s,
-        'Distance',
+        L(d, 'vid.distance'),
         num,
         unit,
         iconRoute(ctx, s.accent),
         s.text,
-        leg ? `leg ${formatDistance(legM)}` : undefined,
+        leg ? L(d, 'vid.leg', { value: formatDistance(legM, decimalSep(d.locale ?? 'en')) }) : undefined,
       );
       break;
     }
     case 'pace': {
       const p = d.track.paceAt(d.t, o.paceWindow);
       const v = p === null || p > 3600 ? '–:––' : formatDuration(p);
-      numeric(ctx, w, h, s, 'Pace', v, '/km', iconRunner(ctx, s.accent));
+      numeric(ctx, w, h, s, L(d, 'vid.pace'), v, '/km', iconRunner(ctx, s.accent));
       break;
     }
     case 'heartRate': {
@@ -384,12 +389,12 @@ export function drawComponent(ctx: CanvasRenderingContext2D, cfg: ComponentConfi
         w,
         h,
         s,
-        'Heart rate',
+        L(d, 'vid.hr'),
         hr === null ? '–' : String(Math.round(hr)),
         'bpm',
         iconHeart(ctx, ZONE_COLORS[zone], beat),
         s.text,
-        hr === null ? undefined : `zone ${zone + 1}`,
+        hr === null ? undefined : L(d, 'vid.zone', { n: zone + 1 }),
       );
       break;
     }
@@ -487,7 +492,7 @@ function drawElevation(ctx: CanvasRenderingContext2D, cfg: ComponentConfig, d: C
     ctx.textAlign = 'left';
     ctx.font = `600 ${h * 0.1}px ${FONT}`;
     ctx.fillStyle = s.muted;
-    ctx.fillText('ELEVATION', padX, h * 0.17);
+    ctx.fillText(L(d, 'vid.elevation').toUpperCase(), padX, h * 0.17);
     ctx.textAlign = 'right';
     ctx.font = `700 ${h * 0.12}px ${FONT}`;
     ctx.fillStyle = s.text;

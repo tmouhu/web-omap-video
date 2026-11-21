@@ -224,3 +224,10 @@ input[type='range'] {
   width: 26px;
   padding: 0;
 }
+kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}

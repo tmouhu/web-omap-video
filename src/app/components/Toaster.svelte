@@ -1,16 +1,17 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte';
   /** Non-blocking notifications (STORY-37). */
   import { app } from '../state.svelte';
 </script>
 
 <div class="toasts" role="status" aria-live="polite" data-testid="toasts">
-  {#each app.toasts as t (t.id)}
-    <div class="toast {t.kind}">
-      <span>{t.text}</span>
+  {#each app.toasts as toast (toast.id)}
+    <div class="toast {toast.kind}">
+      <span>{toast.text}</span>
       <button
         class="btn ghost icon sm"
-        aria-label="Dismiss"
-        onclick={() => (app.toasts = app.toasts.filter((x) => x.id !== t.id))}
+        aria-label={t('common.dismiss')}
+        onclick={() => (app.toasts = app.toasts.filter((x) => x.id !== toast.id))}
       >
         ✕
       </button>

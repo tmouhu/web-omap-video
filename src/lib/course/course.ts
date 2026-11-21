@@ -1,3 +1,4 @@
+import type { MsgKey } from '../i18n/core';
 /**
  * Orienteering course model (STORY-18): ordered start → controls → finish, positions in WGS84.
  * The same location may appear twice (butterfly / loop courses).
@@ -34,15 +35,15 @@ export function emptyCourse(name = 'Course'): Course {
   return { name, points: [] };
 }
 
-/** Problems that prevent using the course for leg animation ([] = valid). */
-export function courseProblems(c: Course | null): string[] {
-  if (!c || c.points.length === 0) return ['Place the start, at least one control and the finish.'];
-  const p: string[] = [];
-  if (c.points[0].kind !== 'start') p.push('The course must begin with a start.');
-  if (c.points[c.points.length - 1].kind !== 'finish') p.push('The course must end with a finish.');
-  if (!c.points.some((x) => x.kind === 'control')) p.push('Add at least one control.');
-  if (c.points.filter((x) => x.kind === 'start').length > 1) p.push('Only one start is allowed.');
-  if (c.points.filter((x) => x.kind === 'finish').length > 1) p.push('Only one finish is allowed.');
+/** Problems that prevent using the course for leg animation, as message keys ([] = valid). */
+export function courseProblems(c: Course | null): MsgKey[] {
+  if (!c || c.points.length === 0) return ['course.p.empty'];
+  const p: MsgKey[] = [];
+  if (c.points[0].kind !== 'start') p.push('course.p.start');
+  if (c.points[c.points.length - 1].kind !== 'finish') p.push('course.p.finish');
+  if (!c.points.some((x) => x.kind === 'control')) p.push('course.p.control');
+  if (c.points.filter((x) => x.kind === 'start').length > 1) p.push('course.p.oneStart');
+  if (c.points.filter((x) => x.kind === 'finish').length > 1) p.push('course.p.oneFinish');
   return p;
 }
 

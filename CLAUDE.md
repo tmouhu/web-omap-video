@@ -49,6 +49,8 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
 - `src/lib/project/` – `project.ts` (versioned ProjectDoc, `migrate`, `.omvproj` zip), `storage.ts` (IndexedDB library),
   `presets.ts` (style presets).
 - `src/app/projects.svelte.ts` – autosave (`startAutosave`), open/new/rename/delete, project files.
+- `src/lib/i18n/` – `core.ts` (translate, pseudo-locale, `UserError`, decimal separator), `en.ts`, `fi.ts`.
+  `src/app/i18n.svelte.ts` – reactive UI locale, `t()`, `errorText()`, `dist()`, `int()`.
 - `src/app/` – Svelte UI. `state.svelte.ts` = global `app` state (runes class: track, layers, raster, georef, frame,
   export, course, passings, GPX edits, tools, undo, project, toasts, theme). `WorkflowRail` steps (test ids `tab-*`):
   map (`MapPanel`), gpx (`GpxPanel`), course (`CoursePanel`), routes (`RoutePanel`), style (`PresetsPanel`,
@@ -81,4 +83,9 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
   effect's dependency list in `projects.svelte.ts`; add defaults so `migrate()` fills it for old projects.
 - Panels must not cache `app.<settingsObject>` in a plain const (presets/projects replace the objects): use `$derived`.
 - `tests/resources/` holds real user data (GPX, map) – used by `tests/realworld.test.ts`; do not modify.
+- **No hard-coded user-visible text**: use `t('key')` (add the key to BOTH `en.ts` and `fi.ts`); library code throws
+  `UserError('err.key', params)` and returns message keys; show errors with `errorText(e)`. Video texts use the
+  project's `videoLocale` (not the UI locale). Check with `?lang=xx` (unbracketed text = hard-coded).
+  Don't name a local variable `t` where you call `t()` (Svelte templates/arrow params shadow it).
+- E2E tests run in English (browser default); keep English strings stable or update the tests.
 - Keep `docs/PROGRESS.md` updated when an issue's acceptance criteria change status.

@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { dist, int, t } from '../i18n.svelte';
   /** GPX tab: track summary (STORY-2) and the non-destructive GPX editor (STORY-21). */
   import { app } from '../state.svelte';
-  import { formatClock, formatDistance, formatDuration } from '../../lib/format';
+  import { formatClock, formatDuration } from '../../lib/format';
   import { writeGpx } from '../../lib/gpx/write';
 
   const tr = $derived(app.track);
@@ -42,29 +43,29 @@
 </script>
 
 <section class="section">
-  <div class="sec-head"><h3 class="sec-title">Track</h3></div>
+  <div class="sec-head"><h3 class="sec-title">{t('gpx.track')}</h3></div>
   {#if tr}
     <div data-testid="track-info">
       <strong class="name">{tr.name}</strong>
       <dl>
-        <dt>Length</dt>
-        <dd class="mono">{formatDistance(tr.length)}</dd>
-        <dt>Duration</dt>
+        <dt>{t('gpx.length')}</dt>
+        <dd class="mono">{dist(tr.length)}</dd>
+        <dt>{t('gpx.duration')}</dt>
         <dd class="mono">{formatDuration(tr.duration)}</dd>
-        <dt>Points</dt>
-        <dd class="mono">{tr.points.length.toLocaleString('en')}</dd>
-        <dt>Start</dt>
+        <dt>{t('gpx.points')}</dt>
+        <dd class="mono">{int(tr.points.length)}</dd>
+        <dt>{t('gpx.start')}</dt>
         <dd class="mono">{tr.startTime ? formatClock(tr.startTime) : '—'}</dd>
       </dl>
       <div class="chips">
-        <span class="chip" class:on={channels?.time}>Time</span>
-        <span class="chip" class:on={channels?.heartRate}>Heart rate</span>
-        <span class="chip" class:on={channels?.elevation}>Elevation</span>
+        <span class="chip" class:on={channels?.time}>{t('gpx.chTime')}</span>
+        <span class="chip" class:on={channels?.heartRate}>{t('gpx.chHr')}</span>
+        <span class="chip" class:on={channels?.elevation}>{t('gpx.chEle')}</span>
       </div>
-      {#if !channels?.time}<p class="note warn">No timestamps: playback assumes 3 m/s.</p>{/if}
+      {#if !channels?.time}<p class="note warn">{t('gpx.noTime')}</p>{/if}
     </div>
     <label class="btn sm replace">
-      Replace GPX…
+      {t('gpx.replace')}
       <input
         type="file"
         accept=".gpx,application/gpx+xml"
@@ -77,9 +78,9 @@
       />
     </label>
   {:else}
-    <p class="small muted">Load a GPX file to start. It stays on this device.</p>
+    <p class="small muted">{t('gpx.loadHint')}</p>
     <label class="btn sm primary replace">
-      Choose GPX…
+      {t('gpx.choose')}
       <input
         type="file"
         accept=".gpx,application/gpx+xml"
@@ -97,8 +98,8 @@
 {#if tr}
   <section class="section" data-testid="gpx-editor">
     <div class="sec-head">
-      <h3 class="sec-title">Fix GPS errors</h3>
-      <span class="tag" data-testid="edit-count">{app.gpxEdits.length} edits</span>
+      <h3 class="sec-title">{t('gpx.fixTitle')}</h3>
+      <span class="tag" data-testid="edit-count">{t('gpx.edits', { n: app.gpxEdits.length })}</span>
     </div>
     <button
       class="btn"
@@ -108,28 +109,31 @@
       data-testid="gpx-edit"
       onclick={() => app.setTool('gpx')}
     >
-      {editing ? 'Done editing' : 'Edit track on map'}
+      {editing ? t('gpx.doneEditing') : t('gpx.edit')}
     </button>
     {#if editing}
       <ul class="help small muted">
-        <li>Zoom in to see the track points. <b>Drag</b> a point to move it; nearby points follow within the brush.</li>
-        <li>Click a point to select it; <kbd>Delete</kbd> removes it. Times are never changed.</li>
+        <li>{@html t('gpx.help1')}</li>
+        <li>{@html t('gpx.help2')}</li>
       </ul>
       <label class="field">
-        <span>Brush · {app.brushRadius} m</span>
+        <span>{t('gpx.brush', { m: app.brushRadius })}</span>
         <input type="range" min="0" max="60" step="5" bind:value={app.brushRadius} />
       </label>
       {#if app.selectedTrackIndex !== null}
         <div class="row">
           <span class="small mono">
-            Point {app.selectedTrackIndex + 1} · {formatDuration(tr.points[app.selectedTrackIndex]?.t ?? 0)}
+            {t('gpx.point', {
+              n: app.selectedTrackIndex + 1,
+              time: formatDuration(tr.points[app.selectedTrackIndex]?.t ?? 0),
+            })}
           </span>
           <button
             class="btn sm"
             onclick={() =>
               app.addGpxEdit({ type: 'delete', from: app.selectedTrackIndex!, to: app.selectedTrackIndex! })}
           >
-            Delete point
+            {t('gpx.deletePoint')}
           </button>
         </div>
       {/if}
@@ -137,7 +141,7 @@
 
     <div class="row">
       <span class="small">
-        {outlierCount ? `${outlierCount} GPS spike${outlierCount > 1 ? 's' : ''} found` : 'No GPS spikes found'}
+        {outlierCount === 1 ? t('gpx.spike1') : outlierCount ? t('gpx.spikes', { n: outlierCount }) : t('gpx.noSpikes')}
       </span>
       <button
         class="btn sm"
@@ -145,21 +149,25 @@
         onclick={() => app.removeOutliers()}
         data-testid="remove-outliers"
       >
-        Remove
+        {t('gpx.remove')}
       </button>
     </div>
 
     <div class="range">
-      <span class="small muted">Time range (set from the playhead)</span>
+      <span class="small muted">{t('gpx.rangeTitle')}</span>
       <div class="row">
         <button class="btn sm" onclick={() => (app.editRange = [app.time, app.editRange[1]])} data-testid="range-a">
-          From {app.editRange[0] !== null ? formatDuration(app.editRange[0]) : '…'}
+          {t('gpx.from', { time: app.editRange[0] !== null ? formatDuration(app.editRange[0]) : '…' })}
         </button>
         <button class="btn sm" onclick={() => (app.editRange = [app.editRange[0], app.time])} data-testid="range-b">
-          To {app.editRange[1] !== null ? formatDuration(app.editRange[1]) : '…'}
+          {t('gpx.to', { time: app.editRange[1] !== null ? formatDuration(app.editRange[1]) : '…' })}
         </button>
         {#if app.editRange[0] !== null || app.editRange[1] !== null}
-          <button class="btn ghost icon sm" aria-label="Clear range" onclick={() => (app.editRange = [null, null])}>
+          <button
+            class="btn ghost icon sm"
+            aria-label={t('gpx.clearRange')}
+            onclick={() => (app.editRange = [null, null])}
+          >
             ✕
           </button>
         {/if}
@@ -171,7 +179,7 @@
           onclick={() => app.deleteRange()}
           data-testid="range-delete"
         >
-          Delete inside
+          {t('gpx.deleteInside')}
         </button>
         <button
           class="btn sm"
@@ -179,7 +187,7 @@
           onclick={() => app.trimToRange()}
           data-testid="range-trim"
         >
-          Trim to range
+          {t('gpx.trim')}
         </button>
         <button
           class="btn sm"
@@ -188,43 +196,36 @@
           onclick={() => app.setTool('gpx-redraw')}
           data-testid="range-redraw"
         >
-          Redraw…
+          {t('gpx.redraw')}
         </button>
       </div>
       {#if app.tool === 'gpx-redraw'}
         <p class="note warn">
-          Click the route you ran between the range ends; double-click or press <kbd>Enter</kbd> to apply,
-          <kbd>Esc</kbd>
-          to cancel. Times are spread along the new line.
+          {@html t('gpx.redrawHelp')}
         </p>
       {/if}
     </div>
 
     {#if app.passings}
-      <button
-        class="btn sm"
-        onclick={snapToControls}
-        disabled={app.locked}
-        title="Moves the track so it passes exactly through each found control"
-      >
-        Snap track to controls
+      <button class="btn sm" onclick={snapToControls} disabled={app.locked} title={t('gpx.snapTitle')}>
+        {t('gpx.snap')}
       </button>
     {/if}
 
     <div class="row">
-      <label class="check"><input type="checkbox" bind:checked={app.showOriginalGpx} /> Show original</label>
+      <label class="check"><input type="checkbox" bind:checked={app.showOriginalGpx} /> {t('gpx.showOriginal')}</label>
       <button class="btn sm ghost" disabled={!app.gpxEdits.length} onclick={() => app.resetGpxEdits()}>
-        Reset all edits
+        {t('gpx.reset')}
       </button>
     </div>
     <div class="row">
-      <button class="btn sm ghost" disabled={!app.canUndo} onclick={() => app.undo()} title="Undo (⌘/Ctrl Z)">
-        ↶ Undo
+      <button class="btn sm ghost" disabled={!app.canUndo} onclick={() => app.undo()} title={t('app.undoTitle')}>
+        {t('gpx.undo')}
       </button>
-      <button class="btn sm ghost" disabled={!app.canRedo} onclick={() => app.redo()} title="Redo (⇧⌘/Ctrl Z)">
-        ↷ Redo
+      <button class="btn sm ghost" disabled={!app.canRedo} onclick={() => app.redo()} title={t('app.redoTitle')}>
+        {t('gpx.redo')}
       </button>
-      <button class="btn sm" onclick={exportGpx} data-testid="gpx-export">Export edited GPX</button>
+      <button class="btn sm" onclick={exportGpx} data-testid="gpx-export">{t('gpx.export')}</button>
     </div>
   </section>
 {/if}
@@ -290,12 +291,5 @@
     padding-left: 18px;
     display: grid;
     gap: 2px;
-  }
-  kbd {
-    font-family: var(--mono);
-    font-size: 11px;
-    padding: 0 4px;
-    border: 1px solid var(--border-strong);
-    border-radius: 4px;
   }
 </style>

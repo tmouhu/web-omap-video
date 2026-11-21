@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte';
   /**
    * Map panel (EPIC-2): orienteering raster map (STORY-13), manual georeferencing (STORY-14),
    * layer stack (STORY-16), custom WMS/WMTS (STORY-17), credits for the video description.
    */
   import { app } from '../state.svelte';
   import { crsName } from '../../lib/geo/crs';
-  import { isReprojected, sourceCrs } from '../../lib/map/layerModel';
+  import { isReprojected, sourceCrs, type LayerDesc } from '../../lib/map/layerModel';
   import { pixelSize } from '../../lib/raster/affine';
   import { viewAffine } from '../../lib/raster/rasterMap';
   import { formatWorldFile } from '../../lib/raster/worldfile';
@@ -15,12 +16,9 @@
   let copied = $state(false);
   let pendingCrs = $state('EPSG:3067');
 
-  const SOURCE_LABEL = {
-    'world-file': 'World file',
-    kmz: 'KMZ / KML',
-    manual: 'Manual control points',
-    placed: 'Not georeferenced yet',
-  } as const;
+  /** Built-in layers get translated titles; user layers keep their own. */
+  const layerTitle = (l: LayerDesc) =>
+    l.kind === 'mapant' ? t('layer.mapant') : l.kind === 'osm' ? t('layer.osm') : l.title;
 
   const r = $derived(app.raster);
   const rasterDesc = $derived(app.layers.find((l) => l.kind === 'raster'));
@@ -58,8 +56,8 @@
 
 <section class="section" data-testid="map-panel">
   <div class="sec-head">
-    <h3 class="sec-title">Map</h3>
-    <span class="tag mono" title="Coordinate system of the map view (TM35FIN in Finland)" data-testid="crs-tag">
+    <h3 class="sec-title">{t('map.title')}</h3>
+    <span class="tag mono" title={t('map.crsTitle')} data-testid="crs-tag">
       {app.crs.name}
     </span>
   </div>
@@ -71,8 +69,8 @@
         <strong class="name" title={r.name}>{r.name}</strong>
         <button
           class="btn ghost icon sm"
-          title="Remove map image"
-          aria-label="Remove map image"
+          title={t('map.removeImage')}
+          aria-label={t('map.removeImage')}
           disabled={app.locked}
           onclick={() => app.removeRaster()}
         >
@@ -80,24 +78,24 @@
         </button>
       </div>
       <dl>
-        <dt>Image</dt>
-        <dd class="mono">{r.width.toLocaleString('en')} × {r.height.toLocaleString('en')} px</dd>
-        <dt>Placement</dt>
-        <dd data-testid="georef-source">{SOURCE_LABEL[r.georef.source]}</dd>
-        <dt>Coordinates</dt>
+        <dt>{t('map.image')}</dt>
+        <dd class="mono">{r.width} × {r.height} px</dd>
+        <dt>{t('map.placement')}</dt>
+        <dd data-testid="georef-source">{t(`src.${r.georef.source}`)}</dd>
+        <dt>{t('map.coordinates')}</dt>
         <dd>{crsName(r.georef.crs)}</dd>
-        <dt>Pixel size</dt>
+        <dt>{t('map.pixelSize')}</dt>
         <dd class="mono">{pxSize.toFixed(3)} m</dd>
       </dl>
       <label class="field">
-        <span>Print scale of the map</span>
+        <span>{t('map.printScale')}</span>
         <div class="scale">
           <span class="mono muted">1:</span>
           <input
             type="number"
             min="500"
             step="500"
-            placeholder={scaleAt300 ? `${scaleAt300} at 300 dpi?` : '10000'}
+            placeholder={scaleAt300 ? t('map.at300', { scale: scaleAt300 }) : '10000'}
             value={r.printScale ?? ''}
             disabled={app.locked}
             onchange={(e) => {
@@ -109,7 +107,7 @@
       </label>
       {#if rasterDesc}
         <label class="field">
-          <span>Map image opacity · {Math.round(rasterDesc.opacity * 100)} %</span>
+          <span>{t('map.opacity', { pct: Math.round(rasterDesc.opacity * 100) })}</span>
           <input
             type="range"
             min="0"
@@ -118,16 +116,16 @@
             bind:value={rasterDesc.opacity}
             data-testid="raster-opacity"
           />
-          <small class="muted">Fade to check the alignment against the background map and your GPX.</small>
+          <small class="muted">{t('map.opacityHelp')}</small>
         </label>
       {/if}
       {#if !app.georef.active}
         <div class="row gap">
           <button class="btn sm" onclick={() => app.startGeoref()} disabled={app.locked} data-testid="georef-start">
-            {r.georef.source === 'placed' ? 'Georeference…' : 'Adjust placement…'}
+            {r.georef.source === 'placed' ? t('map.georef') : t('map.adjust')}
           </button>
-          <button class="btn sm ghost" onclick={downloadWorldFile} title="Save the georeference as a world file">
-            World file ↓
+          <button class="btn sm ghost" onclick={downloadWorldFile} title={t('map.worldFileTitle')}>
+            {t('map.worldFile')}
           </button>
         </div>
       {/if}
@@ -135,18 +133,18 @@
   {:else if app.pendingRaster}
     <div class="raster">
       <p class="note warn">
-        The world file does not say which coordinate system it uses. Choose the one the map was exported in:
+        {t('map.whichCrs')}
       </p>
       <div class="row gap">
-        <select bind:value={pendingCrs} aria-label="Coordinate system of the world file">
-          <option value="EPSG:3067">ETRS-TM35FIN (Finland)</option>
+        <select bind:value={pendingCrs} aria-label={t('map.crsOfWorldFile')}>
+          <option value="EPSG:3067">{t('map.tm35')}</option>
           <option value="EPSG:3857">Web Mercator</option>
-          <option value="EPSG:4326">WGS84 lon/lat</option>
+          <option value="EPSG:4326">{t('map.wgs84')}</option>
           {#each Array.from({ length: 60 }, (_, i) => i + 1) as z (z)}
-            <option value={`UTM${z}`}>WGS84 / UTM zone {z}N</option>
+            <option value={`UTM${z}`}>{t('map.utmZone', { z })}</option>
           {/each}
         </select>
-        <button class="btn sm primary" onclick={() => app.resolvePendingRaster(pendingCrs)}>Use</button>
+        <button class="btn sm primary" onclick={() => app.resolvePendingRaster(pendingCrs)}>{t('map.use')}</button>
       </div>
     </div>
   {:else}
@@ -160,8 +158,8 @@
         accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.kmz,.kml,.prj,.jgw,.jpgw,.pgw,.pngw,.tfw,.gfw,.wld"
         onchange={pickFiles}
       />
-      <strong>{app.rasterLoading ? 'Loading map…' : 'Add orienteering map…'}</strong>
-      <span class="muted small">Image + world file (.jgw/.pgw), KMZ, or a plain image to place by hand</span>
+      <strong>{app.rasterLoading ? t('map.loading') : t('map.add')}</strong>
+      <span class="muted small">{t('map.addHelp')}</span>
     </label>
   {/if}
   {#if app.rasterError}<p class="note err" role="alert" data-testid="raster-error">{app.rasterError}</p>{/if}
@@ -170,14 +168,14 @@
   {#if app.georef.active && r}
     <div class="georef" data-testid="georef-panel">
       <div class="row">
-        <strong>Place the map with control points</strong>
-        <span class="tag">{fit ? fit.kind : 'no points'}</span>
+        <strong>{t('geo.title')}</strong>
+        <span class="tag">{fit ? t(`geo.kind.${fit.kind}`) : t('geo.noPoints')}</span>
       </div>
       <ol class="steps muted small">
-        <li>Click a distinctive point on the map image.</li>
-        <li>Click the same point on the background map.</li>
+        <li>{t('geo.step1')}</li>
+        <li>{t('geo.step2')}</li>
       </ol>
-      <small class="muted">1 point moves the image, 2 also rotate and scale it, 3 or more fit it fully.</small>
+      <small class="muted">{t('geo.help')}</small>
       {#if app.georef.pairs.length}
         <ul class="pairs" data-testid="georef-pairs">
           {#each app.georef.pairs as _, i (i)}
@@ -186,7 +184,7 @@
               <span class="mono small">{fit && app.georef.pairs.length > 2 ? m(fit.residuals[i]) : '—'}</span>
               <button
                 class="btn ghost icon sm"
-                aria-label="Remove point {i + 1}"
+                aria-label={t('geo.removePoint', { n: i + 1 })}
                 onclick={() => app.removeGeorefPair(i)}
               >
                 ✕
@@ -197,8 +195,8 @@
       {/if}
       {#if fit && app.georef.pairs.length > 2}
         <p class="note" class:warn={fit.rms > 5} class:ok={fit.rms <= 5} data-testid="georef-rms">
-          RMS error {m(fit.rms)}
-          {fit.rms > 5 ? '– check the points' : ''}
+          {t('geo.rms', { value: m(fit.rms) })}
+          {fit.rms > 5 ? t('geo.check') : ''}
         </p>
       {/if}
       {#if app.georef.pairs.length >= 3}
@@ -208,12 +206,14 @@
             checked={app.georef.prefer === 'similarity'}
             onchange={(e) => app.setGeorefPrefer((e.currentTarget as HTMLInputElement).checked ? 'similarity' : 'auto')}
           />
-          Keep shape (no skew) – for good printed maps
+          {t('geo.keepShape')}
         </label>
       {/if}
       <div class="row gap">
-        <button class="btn sm primary" onclick={() => app.finishGeoref()} data-testid="georef-done">Done</button>
-        <button class="btn sm" onclick={() => app.cancelGeoref()}>Cancel</button>
+        <button class="btn sm primary" onclick={() => app.finishGeoref()} data-testid="georef-done">
+          {t('common.done')}
+        </button>
+        <button class="btn sm" onclick={() => app.cancelGeoref()}>{t('common.cancel')}</button>
       </div>
     </div>
   {/if}
@@ -221,9 +221,9 @@
   <!-- Layer stack -->
   <div class="layers">
     <div class="row">
-      <span class="small muted">Layers (top first)</span>
+      <span class="small muted">{t('layers.title')}</span>
       <button class="btn sm" onclick={() => (addOpen = true)} disabled={app.locked} data-testid="add-layer">
-        + Add layer
+        {t('layers.add')}
       </button>
     </div>
     <ul data-testid="layer-list">
@@ -232,26 +232,25 @@
           <input
             type="checkbox"
             bind:checked={l.visible}
-            aria-label="Show {l.title}"
+            aria-label={t('layers.show', { name: layerTitle(l) })}
             disabled={app.locked}
             data-testid="layer-visible-{l.id}"
           />
           <div class="lmain">
-            <span class="ltitle" title={l.title}>{l.title}</span>
+            <span class="ltitle" title={layerTitle(l)}>{layerTitle(l)}</span>
             <span class="badges">
-              {#if l.kind === 'raster'}<span class="badge">orienteering map</span>{/if}
+              {#if l.kind === 'raster'}<span class="badge">{t('layers.orienteering')}</span>{/if}
               {#if l.visible && (app.layerHealth[l.id]?.error ?? 0) >= 6 && (app.layerHealth[l.id]?.ok ?? 0) === 0}
-                <span
-                  class="badge warn"
-                  data-testid="layer-failing-{l.id}"
-                  title="No tile of this layer has loaded. The service may be down, outside its coverage area, or not allow use from web apps (CORS). It will be empty in the video."
-                >
-                  ⚠ tiles not loading
+                <span class="badge warn" data-testid="layer-failing-{l.id}" title={t('layers.failingTitle')}>
+                  {t('layers.failing')}
                 </span>
               {/if}
               {#if isReprojected(l, app.crs.code)}
-                <span class="badge" title="Tiles in {sourceCrs(l, app.crs.code)} are reprojected to {app.crs.name}">
-                  reprojected
+                <span
+                  class="badge"
+                  title={t('layers.reprojTitle', { from: sourceCrs(l, app.crs.code), to: app.crs.name })}
+                >
+                  {t('layers.reprojected')}
                 </span>
               {/if}
             </span>
@@ -261,14 +260,14 @@
               max="1"
               step="0.05"
               bind:value={l.opacity}
-              aria-label="Opacity of {l.title}"
+              aria-label={t('layers.opacity', { name: layerTitle(l) })}
               disabled={app.locked}
             />
           </div>
           <div class="lbtns">
             <button
               class="btn ghost icon sm"
-              aria-label="Move {l.title} up"
+              aria-label={t('layers.up', { name: layerTitle(l) })}
               disabled={i === 0 || app.locked}
               onclick={() => app.moveLayer(l.id, 1)}
             >
@@ -276,7 +275,7 @@
             </button>
             <button
               class="btn ghost icon sm"
-              aria-label="Move {l.title} down"
+              aria-label={t('layers.down', { name: layerTitle(l) })}
               disabled={i === layersTopFirst.length - 1 || app.locked}
               onclick={() => app.moveLayer(l.id, -1)}
             >
@@ -285,7 +284,7 @@
             {#if l.kind !== 'mapant' && l.kind !== 'osm'}
               <button
                 class="btn ghost icon sm"
-                aria-label="Remove {l.title}"
+                aria-label={t('layers.remove', { name: layerTitle(l) })}
                 disabled={app.locked}
                 onclick={() => app.removeLayer(l.id)}
               >
@@ -301,11 +300,13 @@
   <!-- Credits (not drawn in the video) -->
   <div class="credits">
     <div class="row">
-      <span class="small muted">Map credits for your video description</span>
-      <button class="btn sm ghost" onclick={copyCredits} disabled={!app.credits}>{copied ? 'Copied ✓' : 'Copy'}</button>
+      <span class="small muted">{t('credits.title')}</span>
+      <button class="btn sm ghost" onclick={copyCredits} disabled={!app.credits}>
+        {copied ? t('common.copied') : t('common.copy')}
+      </button>
     </div>
     <p class="small" data-testid="credits">{app.credits || '—'}</p>
-    <small class="muted">MapAnt and OpenStreetMap licences require crediting them where the video is published.</small>
+    <small class="muted">{t('credits.help')}</small>
   </div>
 </section>
 

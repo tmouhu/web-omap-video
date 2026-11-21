@@ -91,10 +91,12 @@ Status per backlog issue (see `plan/`). ✅ done · 🟡 partial · ⬜ not star
 | STORY-37 App shell | ✅ | Workflow rail (6 steps with status), top bar (project name, save state, undo/redo, save file, theme, shortcuts), start screen, empty-state actions, toasts, `?` shortcut sheet, status line (scale, cursor coordinates), dark/light/system theme. **Missing:** first-run tour, tablet layout |
 | STORY-38 Save/open projects | ✅ | Debounced autosave to IndexedDB (image stored only when changed), project library with thumbnails, rename, delete (confirm), sample project, `.omvproj` save/open (also by drop), "New from this map", storage usage + persist request |
 | STORY-39 Settings & presets | ✅ | Built-ins (Classic forest, Sprint, Coach analysis), own presets (localStorage) with export/import, reset to defaults, "More settings…" for advanced camera options |
-| STORY-40 Localisation | ⬜ | Not started (Could) |
+| STORY-40 Localisation | ✅ | English + Finnish UI (`t()`, 520+ keys, typed: fi must define every key), language switch in the top bar (remembered; browser language detected; `?lang=` override), separate **video language** in the project (component labels, decimal comma in distances and route lengths), translated library errors (`UserError` keys), pseudo-locale `?lang=xx` for truncation/hard-coded-text checks |
 
 Real-world check (tests/resources): the haukkaroga GPX (2 h, HR/cadence/elevation) and the h1 map (JPG + world file,
 TM35FIN guessed correctly, aligns with MapAnt) – `tests/realworld.test.ts`.
+
+**App icon:** favicon (ICO 16/32/48 + PNG), apple-touch-icon, web manifest icons 192/512, 128 px UI icon (top bar, start card, projects dialog) – exported from `../icons/png` (square exports of `ov_icon`).
 
 ## Known issues
 - The bundled sample GPX has SYNTHETIC elevation and heart rate (for demos/tests).

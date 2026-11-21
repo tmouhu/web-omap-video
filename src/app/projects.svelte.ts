@@ -12,6 +12,7 @@ import {
   type ProjectListItem,
 } from '../lib/project/storage';
 import { app } from './state.svelte';
+import { errorText, t } from './i18n.svelte';
 
 let lastImage: Blob | null = null;
 let lastProjectId = '';
@@ -34,7 +35,7 @@ async function saveNow(): Promise<void> {
     app.saveState = 'saved';
   } catch (e) {
     app.saveState = 'error';
-    app.toast(`Could not save the project in this browser: ${(e as Error).message}`, 'error');
+    app.toast(t('msg.saveFailed', { msg: errorText(e) }), 'error');
   }
 }
 
@@ -85,7 +86,7 @@ export async function openProject(id: string): Promise<void> {
     lastProjectId = doc.id;
     app.showProjects = false;
   } catch (e) {
-    app.toast(`Could not open the project: ${(e as Error).message}`, 'error');
+    app.toast(t('msg.openFailed', { msg: errorText(e) }), 'error');
   } finally {
     // Let the effects of the load settle before autosave listens again.
     setTimeout(() => (applying = false), 0);
@@ -152,7 +153,7 @@ export async function saveProjectFile(): Promise<void> {
       const w = await h.createWritable();
       await w.write(blob);
       await w.close();
-      app.toast(`Project saved to ${h.name}`, 'ok');
+      app.toast(t('msg.savedTo', { name: h.name }), 'ok');
       return;
     } catch (e) {
       if ((e as DOMException).name === 'AbortError') return;
@@ -173,12 +174,12 @@ export async function openProjectFile(file: File): Promise<void> {
     const { doc, image } = unpackProjectFile(new Uint8Array(await file.arrayBuffer()));
     await app.applyDoc(doc, image);
     app.showProjects = false;
-    app.toast(`Opened “${doc.name}”`, 'ok');
+    app.toast(t('msg.opened', { name: doc.name }), 'ok');
     lastImage = null; // force saving the image into this browser's library
     applying = false;
     await saveNow();
   } catch (e) {
-    app.toast((e as Error).message, 'error');
+    app.toast(errorText(e), 'error');
   } finally {
     applying = false;
   }

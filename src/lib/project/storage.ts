@@ -2,7 +2,8 @@
  * Local project library in IndexedDB (STORY-38): project documents (JSON) + raster image blobs + thumbnails.
  * Nothing leaves the device.
  */
-import { migrate, projectSummary, type ProjectDoc } from './project';
+import { UserError } from '../i18n/core';
+import { migrate, projectCounts, projectSummary, type ProjectCounts, type ProjectDoc } from './project';
 
 const DB = 'omap-video';
 const VERSION = 1;
@@ -12,7 +13,9 @@ export interface ProjectListItem {
   name: string;
   modified: number;
   thumbnail: string | null;
+  /** English summary (logs); UIs should format `counts` in their language. */
   summary: string;
+  counts: ProjectCounts;
 }
 
 interface ProjectRecord {
@@ -77,13 +80,14 @@ export async function listProjects(): Promise<ProjectListItem[]> {
       modified: r.modified,
       thumbnail: r.thumbnail,
       summary: projectSummary(r.doc),
+      counts: projectCounts(r.doc),
     }))
     .sort((a, b) => b.modified - a.modified);
 }
 
 export async function loadProject(id: string): Promise<{ doc: ProjectDoc; image: Blob | null }> {
   const rec = await tx<ProjectRecord | undefined>(['projects'], 'readonly', (t) => t.objectStore('projects').get(id));
-  if (!rec) throw new Error('Project not found.');
+  if (!rec) throw new UserError('err.projectNotFound');
   const image = await tx<Blob | undefined>(['blobs'], 'readonly', (t) => t.objectStore('blobs').get(`${id}:raster`));
   return { doc: migrate(rec.doc), image: image ?? null };
 }

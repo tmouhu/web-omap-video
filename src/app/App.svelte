@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { i18n, t } from './i18n.svelte';
+  import { LOCALES, type Locale } from '../lib/i18n/core';
   import { app } from './state.svelte';
   import MapStage from './components/MapStage.svelte';
   import Inspector from './components/Inspector.svelte';
@@ -35,13 +37,18 @@
 
   const saveLabel = $derived(
     app.saveState === 'saving'
-      ? 'Saving…'
+      ? t('app.saving')
       : app.saveState === 'error'
-        ? 'Not saved'
+        ? t('app.notSaved')
         : app.saveState === 'saved' && app.lastSaved
-          ? `Saved ${new Date(app.lastSaved).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+          ? t('app.saved', {
+              time: new Date(app.lastSaved).toLocaleTimeString(i18n.locale === 'xx' ? 'en' : i18n.locale, {
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+            })
           : app.hasContent
-            ? 'Not saved yet'
+            ? t('app.notSavedYet')
             : '',
   );
   const nextTheme = { system: 'dark', dark: 'light', light: 'system' } as const;
@@ -96,33 +103,39 @@
 <div class="shell">
   <header class="top">
     <div class="brand">
-      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="8.5" fill="none" stroke="var(--accent)" stroke-width="2.2" /><path
-          d="M12 6.5 16 15l-4-2-4 2z"
-          fill="var(--accent)"
-        />
-      </svg>
+      <img src="{import.meta.env.BASE_URL}icon-128.png" alt="" width="28" height="28" class="logo" />
       <span>OMap Video</span>
     </div>
     <div class="project">
       <button class="btn sm ghost" onclick={() => (app.showProjects = true)} data-testid="open-projects">
-        ☰ Projects
+        {t('app.projects')}
       </button>
       <input
         class="pname"
         type="text"
-        aria-label="Project name"
+        aria-label={t('app.projectName')}
         data-testid="project-name"
         value={app.projectName}
-        onchange={(e) => (app.projectName = (e.currentTarget as HTMLInputElement).value.trim() || 'Untitled project')}
+        onchange={(e) => (app.projectName = (e.currentTarget as HTMLInputElement).value.trim() || t('app.untitled'))}
       />
       <span class="save {app.saveState}" data-testid="save-state">{saveLabel}</span>
     </div>
     <div class="right">
+      <select
+        class="lang"
+        aria-label={t('app.language')}
+        title={t('app.language')}
+        data-testid="language"
+        value={i18n.locale}
+        onchange={(e) => i18n.set((e.currentTarget as HTMLSelectElement).value as Locale)}
+      >
+        {#each LOCALES as l (l.id)}<option value={l.id}>{l.id.toUpperCase()}</option>{/each}
+        {#if i18n.locale === 'xx'}<option value="xx">XX</option>{/if}
+      </select>
       <button
         class="btn ghost icon"
-        title="Undo (⌘/Ctrl Z)"
-        aria-label="Undo"
+        title={t('app.undoTitle')}
+        aria-label={t('app.undo')}
         disabled={!app.canUndo}
         onclick={() => app.undo()}
       >
@@ -130,8 +143,8 @@
       </button>
       <button
         class="btn ghost icon"
-        title="Redo (⇧⌘/Ctrl Z)"
-        aria-label="Redo"
+        title={t('app.redoTitle')}
+        aria-label={t('app.redo')}
         disabled={!app.canRedo}
         onclick={() => app.redo()}
       >
@@ -141,15 +154,15 @@
         class="btn sm"
         disabled={!app.hasContent}
         onclick={() => saveProjectFile()}
-        title="Save a project file (.omvproj) for backup or another computer (⌘/Ctrl S)"
+        title={t('app.saveFileTitle')}
         data-testid="save-project-file"
       >
-        Save file
+        {t('app.saveFile')}
       </button>
       <button
         class="btn ghost icon"
-        title="Theme: {app.theme}"
-        aria-label="Switch theme (now {app.theme})"
+        title={t('app.themeTitle', { theme: t(`theme.${app.theme}`) })}
+        aria-label={t('app.themeSwitch', { theme: t(`theme.${app.theme}`) })}
         data-testid="theme"
         onclick={() => app.setTheme(nextTheme[app.theme])}
       >
@@ -157,8 +170,8 @@
       </button>
       <button
         class="btn ghost icon"
-        title="Keyboard shortcuts (?)"
-        aria-label="Keyboard shortcuts"
+        title={t('app.shortcutsTitle')}
+        aria-label={t('app.shortcuts')}
         onclick={() => (app.showShortcuts = true)}
       >
         ?
@@ -191,6 +204,10 @@
     padding: 0 18px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-elev);
+  }
+  .logo {
+    border-radius: 7px;
+    display: block;
   }
   .brand {
     display: flex;
@@ -227,6 +244,11 @@
   }
   .save.saved {
     color: var(--ok);
+  }
+  .lang {
+    width: 64px;
+    height: 30px;
+    padding: 0 6px;
   }
   .right {
     display: flex;

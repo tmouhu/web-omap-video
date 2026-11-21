@@ -2,6 +2,7 @@
  * Loads a raster map from user files (STORY-13): KMZ, KML + image, image + world file (+ .prj),
  * or a plain image (unreferenced → manual georeferencing, STORY-14).
  */
+import { UserError } from '../i18n/core';
 import type { LatLon } from '../geo/geo';
 import { parseGroundOverlay, readKmz } from './kml';
 import { crsFromPrj, guessWorldFileCrs, parseWorldFile, WORLD_FILE_EXT } from './worldfile';
@@ -43,14 +44,14 @@ export async function readRasterFiles(files: File[], hint: LatLon | null): Promi
   if (kml) {
     const overlay = parseGroundOverlay(await kml.text());
     const img = image ?? files.find((f) => f.name === overlay.href.split('/').pop());
-    if (!img) throw new Error(`Add the image "${overlay.href}" together with the KML file.`);
+    if (!img) throw new UserError('err.kmlNeedsImage', { name: overlay.href });
     return {
       name: overlay.name || stem(img.name),
       image: img,
       georef: { kind: 'corners', corners: overlay.corners, source: 'kmz' },
     };
   }
-  if (!image) throw new Error('No map image found. Add a JPG, PNG, GIF or WebP image, or a KMZ file.');
+  if (!image) throw new UserError('err.noMapImage');
   const world = files.find((f) => WORLD_FILE_EXT.test(f.name));
   if (!world) return { name: stem(image.name), image, georef: { kind: 'none' } };
   const affine = parseWorldFile(await world.text());

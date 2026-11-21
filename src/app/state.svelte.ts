@@ -9,6 +9,8 @@ import {
 } from '../lib/anim/timeline';
 import { legIndexOf, newRouteId, nextLabelAndColor, routesForLeg, type RouteChoice } from '../lib/course/routes';
 import type { ProjectScene } from '../lib/render/frameScene';
+import type { VideoLocale } from '../lib/i18n/core';
+import { errorText, i18n, t, t as translateMsg } from './i18n.svelte';
 import { defaultComponents, type ComponentConfig } from '../lib/components/components';
 import {
   defaultSettings,
@@ -135,7 +137,7 @@ const loadTheme = (): ThemePref => {
 class AppState {
   // --- Project (EN-15 / STORY-38) ---
   projectId = $state(newProjectId());
-  projectName = $state('Untitled project');
+  projectName = $state(t('app.untitled'));
   projectCreated = Date.now();
   saveState = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   lastSaved = $state<number | null>(null);
@@ -272,6 +274,8 @@ class AppState {
   exportRange = $state<ExportRangeSettings>({ ...DEFAULT_EXPORT_RANGE });
   /** Include the map video in the export package. */
   exportMap = $state(true);
+  /** Language of texts in the exported videos (component labels, decimal commas) – STORY-40. */
+  videoLocale = $state<VideoLocale>(i18n.locale === 'fi' ? 'fi' : 'en');
   /** Data component videos (STORY-32..34). */
   components = $state<ComponentConfig[]>(defaultComponents());
   range: ResolvedRange | null = $derived(
@@ -314,6 +318,7 @@ class AppState {
           courseStyle: $state.snapshot(this.courseStyle),
           printScale: this.raster?.printScale ?? null,
           routes: this.routes,
+          videoLocale: this.videoLocale,
         }
       : null,
   );
@@ -338,7 +343,7 @@ class AppState {
       this.error = '';
       return true;
     } catch (e) {
-      this.error = e instanceof GpxError ? e.message : `Could not read the GPX file: ${(e as Error).message}`;
+      this.error = e instanceof GpxError ? errorText(e) : t('msg.gpxRead', { msg: errorText(e) });
       return false;
     }
   }
@@ -352,7 +357,7 @@ class AppState {
     if (raster.length) await this.addRasterFiles(raster);
     if (xml) this.importCourseXml(await xml.text());
     if (!gpx && !raster.length && !xml && files.length) {
-      this.error = `"${files[0].name}" is not a GPX file or a map image.`;
+      this.error = t('msg.notGpxOrMap', { name: files[0].name });
     }
   }
 
@@ -372,7 +377,7 @@ class AppState {
     await this.loadSample();
     const tr = this.track;
     if (!tr) return;
-    this.projectName = 'Sample – Keskuspuisto';
+    this.projectName = t('msg.sampleName');
     for (const t of [5, 140, 300, 470, 620, 760]) {
       const p = tr.positionAt(t);
       this.courseClick({ lat: p.lat + 0.00006, lon: p.lon });
@@ -433,6 +438,7 @@ class AppState {
       speed: this.speed,
       aspect: this.aspect,
       frameCustom: this.frameCustom,
+      videoLocale: this.videoLocale,
     }) as ProjectSettings;
   }
 
@@ -455,6 +461,7 @@ class AppState {
     this.speed = s.speed;
     this.aspect = s.aspect;
     this.frameCustom = s.frameCustom;
+    this.videoLocale = s.videoLocale === 'fi' ? 'fi' : 'en';
   }
 
   toDoc(): ProjectDoc {
@@ -504,6 +511,8 @@ class AppState {
     this.layers = defaultLayers();
     this.layerHealth = {};
     this.applySettings(defaultSettings());
+    // Video texts follow the UI language for new projects (saved projects keep their own).
+    this.videoLocale = i18n.locale === 'fi' ? 'fi' : 'en';
     this.exportResult = null;
     this.error = this.rasterError = this.courseError = this.exportError = '';
     this.time = 0;
@@ -511,7 +520,7 @@ class AppState {
     this.selectedTrackIndex = null;
     this.editRange = [null, null];
     this.projectId = newProjectId();
-    this.projectName = 'Untitled project';
+    this.projectName = t('app.untitled');
     this.projectCreated = Date.now();
     this.saveState = 'idle';
     this.lastSaved = null;
@@ -542,7 +551,7 @@ class AppState {
     this.lastSaved = doc.modified;
     this.saveState = 'saved';
     this.clearHistory();
-    if (doc.raster && !image) this.toast('The map image of this project is missing.', 'error');
+    if (doc.raster && !image) this.toast(t('msg.imageMissing'), 'error');
   }
 
   togglePlay(): void {
@@ -581,7 +590,7 @@ class AppState {
       const { width, height } = levels[0];
       const g = src.georef;
       if (g.kind === 'affine' && !(g.crs && isKnownCrs(g.crs))) {
-        if (g.crs) this.rasterError = `The map's coordinate system ${g.crs} is not supported yet. Choose one below.`;
+        if (g.crs) this.rasterError = t('msg.crsUnsupported', { crs: g.crs });
         this.pendingRaster = { source: src as PendingRaster['source'], levels };
         return;
       }
@@ -598,7 +607,7 @@ class AppState {
       this.setRaster({ name: src.name, width, height, levels, georef, printScale: null, image: src.image });
       if (georef.source === 'placed') this.startGeoref();
     } catch (e) {
-      this.rasterError = (e as Error).message;
+      this.rasterError = errorText(e);
     } finally {
       this.rasterLoading = false;
     }
@@ -695,7 +704,7 @@ class AppState {
       this.raster = { ...this.raster, georef: { crs, affine, source: 'manual' } };
       this.rasterError = '';
     } catch (e) {
-      this.rasterError = (e as Error).message;
+      this.rasterError = errorText(e);
     }
   }
 
@@ -861,10 +870,10 @@ class AppState {
       if (f.courses.length === 1) this.useImportedCourse(f.courses[0]);
       else this.importedCourses = f.courses;
       if (f.skippedControls.length) {
-        this.courseError = `${f.skippedControls.length} control(s) without coordinates were skipped.`;
+        this.courseError = t('msg.skipped', { n: f.skippedControls.length });
       }
     } catch (e) {
-      this.courseError = (e as Error).message;
+      this.courseError = errorText(e);
     }
   }
 
@@ -931,10 +940,10 @@ class AppState {
   setPassing(pointId: string, t: number): string | null {
     const track = this.track;
     const c = this.course;
-    if (!track || !c || !this.passings) return 'No course or track.';
+    if (!track || !c || !this.passings) return translateMsg('msg.noCourseTrack');
     t = Math.min(track.duration, Math.max(0, t));
     const err = validateOverride(c, this.passings, pointId, t);
-    if (err) return err;
+    if (err) return translateMsg(err);
     this.pushHistory();
     this.passingOverrides = { ...this.passingOverrides, [pointId]: (track.startTime ?? 0) + t * 1000 };
     return null;

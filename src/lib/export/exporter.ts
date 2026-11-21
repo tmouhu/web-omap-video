@@ -1,3 +1,4 @@
+import { UserError } from '../i18n/core';
 /**
  * Frame-exact offline video export (EN-10, STORY-9): for each frame n, t = start + n·speed/fps,
  * an off-screen OpenLayers map renders the view from `frameStateAt(t)`, we wait until all tiles are
@@ -107,10 +108,7 @@ export async function openExportTarget(
   const { quota = 0, usage = 0 } = await navigator.storage.estimate();
   if (quota && expectedBytes * 1.15 > quota - usage) {
     const gb = (b: number) => `${(b / 1e9).toFixed(1)} GB`;
-    throw new Error(
-      `The video (~${gb(expectedBytes)}) does not fit in this browser's temporary storage (${gb(quota - usage)} free). ` +
-        'Use Chrome or Edge to save directly to disk, or lower the resolution, bitrate or range.',
-    );
+    throw new UserError('err.tempTooSmall', { size: gb(expectedBytes), free: gb(quota - usage) });
   }
   const handle = await root.getFileHandle(`${TEMP_PREFIX}${Date.now()}.${choice.extension}`, { create: true });
   return { writable: await handle.createWritable(), getFile: () => handle.getFile(), savedToDisk: false, name };
@@ -247,6 +245,7 @@ export async function exportPackage(o: PackageOptions): Promise<PackageResult> {
         rangeEnd: o.endT,
         origin: o.origin,
         passings: o.passings,
+        locale: o.scene.videoLocale,
       };
       for (const l of lanes) {
         if (l.spec.kind === 'map') {
@@ -337,10 +336,7 @@ export async function openPackageTargets(
   const need = files.reduce((s, f) => s + f.bytes, 0);
   const { quota = 0, usage = 0 } = await navigator.storage.estimate();
   if (quota && need * 1.15 > quota - usage) {
-    throw new Error(
-      `The videos (~${(need / 1e9).toFixed(1)} GB) do not fit in this browser's temporary storage. ` +
-        'Use Chrome or Edge to save directly to a folder, or lower the resolution, bitrate or range.',
-    );
+    throw new UserError('err.tempTooSmallMany', { size: `${(need / 1e9).toFixed(1)} GB` });
   }
   const stamp = Date.now();
   const targets = await Promise.all(

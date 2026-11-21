@@ -1,4 +1,5 @@
 /** World files (.jgw/.pgw/.tfw/.wld …) and .prj CRS detection (STORY-13). */
+import { UserError } from '../i18n/core';
 import { isInFinland } from '../geo/finland';
 import { utmCrs } from '../geo/crs';
 import type { LatLon } from '../geo/geo';
@@ -17,7 +18,7 @@ export function parseWorldFile(text: string): Affine {
     .filter(Boolean)
     .map(Number);
   if (v.length < 6 || v.slice(0, 6).some((x) => !Number.isFinite(x))) {
-    throw new Error('Invalid world file: expected six numbers.');
+    throw new UserError('err.worldFile');
   }
   const [A, D, B, E, C, F] = v;
   return [A, B, C - 0.5 * A - 0.5 * B, D, E, F - 0.5 * D - 0.5 * E];

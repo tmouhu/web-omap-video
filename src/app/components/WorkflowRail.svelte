@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n.svelte';
   /** Guided workflow rail (STORY-37): numbered steps with completion state; selects the inspector panel. */
   import { app, type InspectorTab } from '../state.svelte';
   import { courseProblems } from '../../lib/course/course';
@@ -8,44 +9,44 @@
     {
       id: 'map',
       n: 1,
-      label: 'Map',
-      hint: 'Background map and your orienteering map',
+      label: t('step.map'),
+      hint: t('step.map.hint'),
       status: app.raster ? (app.raster.georef.source === 'placed' ? 'warn' : 'done') : 'optional',
     },
-    { id: 'gpx', n: 2, label: 'GPX', hint: 'Load your track and fix GPS errors', status: app.track ? 'done' : 'todo' },
+    { id: 'gpx', n: 2, label: t('step.gpx'), hint: t('step.gpx.hint'), status: app.track ? 'done' : 'todo' },
     {
       id: 'course',
       n: 3,
-      label: 'Course',
-      hint: 'Start, controls, finish and split times',
+      label: t('step.course'),
+      hint: t('step.course.hint'),
       status: !app.course ? 'optional' : courseProblems(app.course).length ? 'warn' : app.passings ? 'done' : 'warn',
     },
     {
       id: 'routes',
       n: 4,
-      label: 'Routes',
-      hint: 'Route choices per leg',
+      label: t('step.routes'),
+      hint: t('step.routes.hint'),
       status: app.routes.length ? 'done' : 'optional',
     },
-    { id: 'style', n: 5, label: 'Style', hint: 'Camera, course, runner and frame', status: 'optional' },
+    { id: 'style', n: 5, label: t('step.style'), hint: t('step.style.hint'), status: 'optional' },
     {
       id: 'export',
       n: 6,
-      label: 'Export',
-      hint: 'Data videos and export',
+      label: t('step.export'),
+      hint: t('step.export.hint'),
       status: app.exportResult ? 'done' : app.track ? 'todo' : 'optional',
     },
   ]);
-  const title: Record<Status, string> = { done: 'Done', todo: 'To do', optional: 'Optional', warn: 'Needs attention' };
+  const title = (s: Status) => t(`status.${s}`);
 </script>
 
-<nav class="rail" aria-label="Workflow">
+<nav class="rail" aria-label={t('rail.label')}>
   {#each steps as s (s.id)}
     <button
       class="step {s.status}"
       aria-current={app.inspectorTab === s.id ? 'step' : undefined}
       data-testid="tab-{s.id}"
-      title="{s.n}. {s.label} – {s.hint} ({title[s.status]})"
+      title="{s.n}. {s.label} – {s.hint} ({title(s.status)})"
       onclick={() => app.setInspectorTab(s.id)}
     >
       <span class="num">

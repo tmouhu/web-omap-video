@@ -40,10 +40,10 @@ export function routeLength(r: Pick<RouteChoice, 'points'>): number {
 }
 
 /** `640 m` (rounded to 5 m) below 1 km, `1.24 km` from 1 km (STORY-30). */
-export function formatRouteLength(m: number): string {
+export function formatRouteLength(m: number, decimalSep = '.'): string {
   const r5 = Math.round(m / 5) * 5;
   if (r5 < 1000) return `${r5} m`;
-  return `${(m / 1000).toFixed(2)} km`;
+  return `${(m / 1000).toFixed(2).replace('.', decimalSep)} km`;
 }
 
 /** Next free label (A, B, C …) and colour for a new route of a leg. */

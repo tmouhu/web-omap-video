@@ -3,6 +3,7 @@
  * passing overrides, route choices and all settings – in one versioned, JSON-serialisable document.
  * Large binary data (the raster image) is stored next to it (IndexedDB blob / file in the .omvproj zip).
  */
+import { UserError } from '../i18n/core';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { DEFAULT_COURSE_CAMERA, type CourseCameraSettings } from '../anim/courseCamera';
 import {
@@ -13,6 +14,7 @@ import {
 } from '../anim/timeline';
 import { defaultComponents, type ComponentConfig } from '../components/components';
 import type { Course } from '../course/course';
+import type { VideoLocale } from '../i18n/core';
 import type { RouteChoice } from '../course/routes';
 import { DEFAULT_EXPORT_RANGE, type ExportRangeSettings } from '../export/range';
 import type { GpxEdit } from '../gpx/edits';
@@ -43,6 +45,8 @@ export interface ProjectSettings {
   speed: number;
   aspect: number;
   frameCustom: { width: number; height: number } | null;
+  /** Language of texts in the exported videos (STORY-40). */
+  videoLocale: VideoLocale;
 }
 
 export function defaultSettings(): ProjectSettings {
@@ -63,6 +67,7 @@ export function defaultSettings(): ProjectSettings {
     speed: 1,
     aspect: 16 / 9,
     frameCustom: null,
+    videoLocale: 'en',
   };
 }
 
@@ -125,10 +130,10 @@ export function mergeDefaults<T>(defaults: T, value: unknown): T {
 
 /** Validates a parsed document and upgrades older versions (migrations go here). */
 export function migrate(raw: unknown): ProjectDoc {
-  if (!isObj(raw)) throw new Error('Not an OMap Video project.');
+  if (!isObj(raw)) throw new UserError('err.notProject');
   const version = typeof raw.version === 'number' ? raw.version : 0;
-  if (version > PROJECT_VERSION) throw new Error('This project was made with a newer version of the app.');
-  if (version < 1) throw new Error('Unknown project format.');
+  if (version > PROJECT_VERSION) throw new UserError('err.projectNewer');
+  if (version < 1) throw new UserError('err.projectUnknown');
   // v1 is current. Future: if (version === 1) raw = migrate1to2(raw) …
   const s = mergeDefaults(defaultSettings(), raw.settings);
   // Components: keep one per kind, defaults for missing kinds/keys.
@@ -184,14 +189,30 @@ export function unpackProjectFile(data: Uint8Array): { doc: ProjectDoc; image: B
   try {
     files = unzipSync(data);
   } catch {
-    throw new Error('The file is not an OMap Video project (.omvproj).');
+    throw new UserError('err.notProjectFile');
   }
   const json = files['project.json'];
-  if (!json) throw new Error('The project file has no project.json.');
+  if (!json) throw new UserError('err.projectNoJson');
   const doc = migrate(JSON.parse(strFromU8(json)));
   const imgName = Object.keys(files).find((f) => f.startsWith('raster.'));
   const image = imgName && doc.raster ? new Blob([files[imgName] as BlobPart], { type: doc.raster.imageType }) : null;
   return { doc, image };
+}
+
+export interface ProjectCounts {
+  points: number;
+  controls: number;
+  raster: boolean;
+  routes: number;
+}
+
+export function projectCounts(doc: ProjectDoc): ProjectCounts {
+  return {
+    points: doc.gpx?.points.length ?? 0,
+    controls: doc.course?.points.filter((p) => p.kind === 'control').length ?? 0,
+    raster: !!doc.raster,
+    routes: doc.routes.length,
+  };
 }
 
 /** One-line summary for project lists. */

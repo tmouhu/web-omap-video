@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { errorText, int, t } from '../i18n.svelte';
+  import type { MsgKey } from '../../lib/i18n/core';
   /**
    * Export (STORY-9/10/11, EPIC-5): time range (STORY-35), outputs (map + data components, STORY-32), one-pass
    * package export into a folder or downloads (STORY-36), progress and results.
@@ -22,7 +24,8 @@
   const exporter = () => import('../../lib/export/exporter');
 
   let abort: AbortController | null = null;
-  let codecInfo = $state<string>('checking…');
+  let codecInfo = $state<string>('');
+  let codecChecked = $state(false);
   let canExport = $state(false);
 
   const size = $derived(computeVideoSize(app.aspect, app.exportShortSide));
@@ -61,9 +64,8 @@
       .then((m) => m.chooseCodec(width, height))
       .then((c) => {
         canExport = !!c;
-        codecInfo = c
-          ? `${c.codec === 'avc' ? 'H.264' : c.codec.toUpperCase()} · ${c.extension.toUpperCase()}`
-          : 'not supported';
+        codecChecked = true;
+        codecInfo = c ? `${c.codec === 'avc' ? 'H.264' : c.codec.toUpperCase()} · ${c.extension.toUpperCase()}` : '';
       });
   });
 
@@ -94,7 +96,7 @@
     for (const o of outputs) {
       const codec = await ex.chooseCodec(o.width, o.height, o.mbps * 1e6);
       if (!codec) {
-        app.exportError = `This browser cannot encode a ${o.width}×${o.height} video. Use a recent Chrome or Edge.`;
+        app.exportError = t('ex.cannotEncode', { w: o.width, h: o.height });
         return;
       }
       const name = ex.videoFileName(track.name, app.exportFps, o.width, o.height, codec.extension, app.speed, o.id);
@@ -106,7 +108,7 @@
         planned.map((p) => ({ name: p.name, codec: p.codec, bytes: estimatedBytes(p.mbps, videoSeconds) })),
       );
     } catch (e) {
-      app.exportError = (e as Error).message;
+      app.exportError = errorText(e);
       return;
     }
     if (!opened) return; // dialog cancelled
@@ -175,12 +177,12 @@
       };
       app.toast(
         opened.folder
-          ? `Exported ${files.length} video${files.length > 1 ? 's' : ''} to “${opened.folder.name}”`
-          : `Export finished: ${files.length} video${files.length > 1 ? 's' : ''}`,
+          ? t('ex.toastFolder', { n: files.length, name: opened.folder.name })
+          : t('ex.toastDone', { n: files.length }),
         'ok',
       );
     } catch (e) {
-      if ((e as DOMException).name !== 'AbortError') app.exportError = (e as Error).message;
+      if ((e as DOMException).name !== 'AbortError') app.exportError = errorText(e);
     } finally {
       app.exporting = false;
       abort = null;
@@ -194,21 +196,21 @@
 
 <section class="export section">
   <div class="sec-head">
-    <h3 class="sec-title">Export</h3>
-    <span class="tag mono">{codecInfo}</span>
+    <h3 class="sec-title">{t('ex.title')}</h3>
+    <span class="tag mono">{codecChecked ? codecInfo || t('ex.notSupported') : t('ex.checking')}</span>
   </div>
 
   <!-- Range (STORY-35) -->
   <div class="field">
-    <span>Time range</span>
-    <div class="seg" role="group" aria-label="Export range">
+    <span>{t('ex.timeRange')}</span>
+    <div class="seg" role="group" aria-label={t('ex.rangeLabel')}>
       <button
         aria-pressed={app.exportRange.mode === 'course'}
         disabled={app.locked || !app.passings}
         onclick={() => (app.exportRange.mode = 'course')}
         data-testid="range-course"
       >
-        Start → finish
+        {t('ex.startFinish')}
       </button>
       <button
         aria-pressed={r?.mode === 'track'}
@@ -216,7 +218,7 @@
         onclick={() => (app.exportRange.mode = 'track')}
         data-testid="range-track"
       >
-        Whole track
+        {t('ex.wholeTrack')}
       </button>
       <button
         aria-pressed={app.exportRange.mode === 'custom'}
@@ -224,7 +226,7 @@
         onclick={() => app.setRangeIn(app.range ? app.range.start + app.exportRange.padBefore : 0)}
         data-testid="range-custom"
       >
-        Custom
+        {t('ex.custom')}
       </button>
     </div>
   </div>
@@ -232,8 +234,9 @@
     <div class="grid2">
       <label class="field">
         <span>
-          From <button class="link" onclick={() => app.setRangeIn(app.time)} title="Set to the playhead (I)">
-            ⇤ playhead
+          {t('ex.from')}
+          <button class="link" onclick={() => app.setRangeIn(app.time)} title={t('ex.setInTitle')}>
+            {t('ex.playheadIn')}
           </button>
         </span>
         <input
@@ -246,8 +249,9 @@
       </label>
       <label class="field">
         <span>
-          To <button class="link" onclick={() => app.setRangeOut(app.time)} title="Set to the playhead (O)">
-            playhead ⇥
+          {t('ex.to')}
+          <button class="link" onclick={() => app.setRangeOut(app.time)} title={t('ex.setOutTitle')}>
+            {t('ex.playheadOut')}
           </button>
         </span>
         <input
@@ -262,35 +266,36 @@
   {/if}
   <div class="grid2">
     <label class="field">
-      <span>Lead-in (s)</span>
+      <span>{t('ex.leadIn')}</span>
       <input type="number" min="0" max="600" bind:value={app.exportRange.padBefore} disabled={app.locked} />
     </label>
     <label class="field">
-      <span>Lead-out (s)</span>
+      <span>{t('ex.leadOut')}</span>
       <input type="number" min="0" max="600" bind:value={app.exportRange.padAfter} disabled={app.locked} />
     </label>
   </div>
 
   <!-- Map video settings -->
   <label class="check">
-    <input type="checkbox" bind:checked={app.exportMap} disabled={app.locked} data-testid="export-map" /> Map video
+    <input type="checkbox" bind:checked={app.exportMap} disabled={app.locked} data-testid="export-map" />
+    {t('ex.mapVideo')}
   </label>
   <div class="grid2">
     <label class="field">
-      <span>Resolution</span>
+      <span>{t('ex.resolution')}</span>
       <select bind:value={app.exportShortSide} disabled={app.locked || !app.exportMap} data-testid="resolution">
         {#each SHORT_SIDES as s (s)}<option value={s}>{s}p</option>{/each}
       </select>
     </label>
     <label class="field">
-      <span>Frame rate</span>
+      <span>{t('ex.frameRate')}</span>
       <select bind:value={app.exportFps} disabled={app.locked} data-testid="fps">
         {#each FRAME_RATES as f (f)}<option value={f}>{f} fps</option>{/each}
       </select>
     </label>
   </div>
   <div class="field">
-    <span>Map bitrate</span>
+    <span>{t('ex.bitrate')}</span>
     <div class="bitrate">
       <input
         type="number"
@@ -304,22 +309,31 @@
         }}
       />
       <span class="muted">Mbit/s</span>
-      <label class="check"><input type="checkbox" bind:checked={app.bitrateAuto} disabled={app.locked} /> Auto</label>
+      <label class="check">
+        <input type="checkbox" bind:checked={app.bitrateAuto} disabled={app.locked} />
+        {t('ex.auto')}
+      </label>
     </div>
   </div>
 
   <div class="summary mono" data-testid="export-summary">
-    <div><span>Map video</span><b>{app.exportMap ? `${size.width} × ${size.height}` : '—'}</b></div>
+    <div><span>{t('ex.mapVideo')}</span><b>{app.exportMap ? `${size.width} × ${size.height}` : '—'}</b></div>
     <div>
-      <span>Components</span><b>{comps.length ? comps.map((c) => COMPONENT_META[c.kind].label).join(', ') : '—'}</b>
+      <span>{t('ex.components')}</span><b>{comps.length ? comps.map((c) => t(`comp.${c.kind}`)).join(', ') : '—'}</b>
     </div>
-    <div><span>Range</span><b>{r ? `${formatDuration(r.start)} – ${formatDuration(r.end)}` : '—'}</b></div>
-    <div><span>Length</span><b>{formatDuration(videoSeconds)} · {frames.toLocaleString('en')} frames</b></div>
-    <div><span>Speed</span><b>{app.speed}×</b></div>
-    {#if clock0 !== null}<div title="GPX clock time of the first frame – use it to line up with the head cam">
-        <span>First frame</span><b data-testid="first-frame-clock">{formatClock(clock0)}</b>
+    <div><span>{t('ex.range')}</span><b>{r ? `${formatDuration(r.start)} – ${formatDuration(r.end)}` : '—'}</b></div>
+    <div>
+      <span>{t('ex.length')}</span><b>{formatDuration(videoSeconds)} · {t('ex.frames', { n: int(frames) })}</b>
+    </div>
+    <div><span>{t('ex.speed')}</span><b>{app.speed}×</b></div>
+    {#if clock0 !== null}<div title={t('ex.firstFrameTitle')}>
+        <span>{t('ex.firstFrame')}</span><b data-testid="first-frame-clock">{formatClock(clock0)}</b>
       </div>{/if}
-    <div><span>Est. size</span><b>~{mb(totalBytes)} · {outputs.length} file{outputs.length === 1 ? '' : 's'}</b></div>
+    <div>
+      <span>{t('ex.estSize')}</span><b>
+        ~{mb(totalBytes)} · {outputs.length === 1 ? t('ex.files1') : t('ex.files', { n: outputs.length })}
+      </b>
+    </div>
   </div>
 
   {#if app.exporting}
@@ -328,12 +342,10 @@
     </div>
     <div class="row">
       <span class="mono muted small" data-testid="export-progress">
-        {app.exportProgress.done.toLocaleString('en')} / {app.exportProgress.total.toLocaleString('en')} · {Math.floor(
-          pct,
-        )} %
-        {#if eta}· {eta} left{/if}
+        {int(app.exportProgress.done)} / {int(app.exportProgress.total)} · {Math.floor(pct)} %
+        {#if eta}{t('ex.left', { time: eta })}{/if}
       </span>
-      <button class="btn" onclick={() => abort?.abort()}>Cancel</button>
+      <button class="btn" onclick={() => abort?.abort()}>{t('common.cancel')}</button>
     </div>
   {:else}
     <button
@@ -342,17 +354,17 @@
       onclick={start}
       data-testid="export"
     >
-      Export {outputs.length === 1
+      {outputs.length === 1
         ? outputs[0].id === 'map'
-          ? `${size.height}p video`
-          : '1 video'
-        : `${outputs.length} videos`}
+          ? t('ex.exportMap', { p: size.height })
+          : t('ex.export1')
+        : t('ex.exportN', { n: outputs.length })}
     </button>
     {#if outputs.length > 1}
-      <small class="muted">You pick a folder once; all files are written there with an export.json.</small>
+      <small class="muted">{t('ex.folderHelp')}</small>
     {/if}
-    {#if !canExport && codecInfo === 'not supported'}
-      <p class="note err">This browser cannot encode video (WebCodecs). Use a recent Chrome or Edge.</p>
+    {#if codecChecked && !canExport}
+      <p class="note err">{t('ex.noWebCodecs')}</p>
     {/if}
   {/if}
   {#if app.exportError}<p class="note err" role="alert">{app.exportError}</p>{/if}
@@ -364,24 +376,29 @@
       <!-- svelte-ignore a11y_media_has_caption -->
       <video src={mapFile.url} controls muted playsinline></video>
       <div class="mono small muted">
-        {res.frames.toLocaleString('en')} frames · exported in {formatDuration(res.elapsedMs / 1000)}
-        ({(res.seconds / (res.elapsedMs / 1000)).toFixed(1)}× real time)
-        {#if res.folder}<br />Saved to folder “{res.folder}” with export.json{/if}
+        {t('ex.resultLine', {
+          n: int(res.frames),
+          time: formatDuration(res.elapsedMs / 1000),
+          x: (res.seconds / (res.elapsedMs / 1000)).toFixed(1),
+        })}
+        {#if res.folder}<br />{t('ex.savedFolder', { name: res.folder })}{/if}
       </div>
       <ul class="files" data-testid="export-files">
         {#each res.files as f (f.id)}
           <li>
-            <span class="fname" title={f.name}>{f.label}</span>
+            <span class="fname" title={f.name}>
+              {f.kind === 'map' ? t('ex.mapLabel') : t(`comp.${f.kind}` as MsgKey)}
+            </span>
             <span class="mono small muted">{mb(f.file.size)}</span>
             {#if f.savedToDisk}
-              <span class="note ok" data-testid={f.kind === 'map' ? 'saved' : `saved-${f.id}`}>✓ saved</span>
+              <span class="note ok" data-testid={f.kind === 'map' ? 'saved' : `saved-${f.id}`}>{t('ex.saved')}</span>
             {:else}
               <button
                 class="btn sm"
                 data-testid={f.kind === 'map' ? 'save' : `download-${f.id}`}
                 onclick={() => download(f)}
               >
-                Download
+                {t('ex.download')}
               </button>
             {/if}
           </li>

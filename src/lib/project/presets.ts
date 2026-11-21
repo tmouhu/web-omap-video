@@ -3,6 +3,7 @@
  * style, runner/tail, route display, data-video styles). Built-ins ship with the app; user presets live in this
  * browser (localStorage) and can be exported/imported as JSON.
  */
+import { UserError } from '../i18n/core';
 import type { ProjectSettings } from './project';
 
 export type PresetSettings = Partial<
@@ -109,6 +110,6 @@ export function parsePresetsJson(text: string): Preset[] {
   const v = JSON.parse(text);
   const list = Array.isArray(v) ? v : [v];
   const ok = list.filter((p) => p && typeof p.name === 'string' && typeof p.settings === 'object');
-  if (!ok.length) throw new Error('No presets found in the file.');
+  if (!ok.length) throw new UserError('err.noPresets');
   return ok.map((p, i) => ({ ...p, builtin: false, id: `u-${Date.now().toString(36)}-${i}` }));
 }

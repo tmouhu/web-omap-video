@@ -1,3 +1,4 @@
+import { UserError } from '../i18n/core';
 /** GPX parsing (STORY-2). Reads trkpt (or rtept), time, ele, and HR/cadence extensions. */
 
 export interface GpxPoint {
@@ -17,7 +18,7 @@ export interface GpxData {
   segments: number;
 }
 
-export class GpxError extends Error {}
+export class GpxError extends UserError {}
 
 function childText(el: Element, name: string): string | null {
   for (const c of Array.from(el.children)) if (c.localName === name) return c.textContent?.trim() ?? null;
@@ -45,7 +46,7 @@ const num = (s: string | null) => {
 
 export function parseGpx(xml: string): GpxData {
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
-  if (doc.getElementsByTagName('parsererror').length > 0) throw new GpxError('The file is not valid XML.');
+  if (doc.getElementsByTagName('parsererror').length > 0) throw new GpxError('err.notXml');
   let nodes = Array.from(doc.getElementsByTagNameNS('*', 'trkpt'));
   if (nodes.length === 0) nodes = Array.from(doc.getElementsByTagNameNS('*', 'rtept'));
 
@@ -65,7 +66,7 @@ export function parseGpx(xml: string): GpxData {
       cad: descendantNumber(n, ['cad', 'cadence', 'runcadence']),
     });
   }
-  if (points.length < 2) throw new GpxError('The GPX file must contain at least two track points.');
+  if (points.length < 2) throw new GpxError('err.gpxTwoPoints');
 
   const trk = doc.getElementsByTagNameNS('*', 'trk')[0];
   const nameEl = trk ? Array.from(trk.children).find((c) => c.localName === 'name') : undefined;

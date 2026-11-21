@@ -6,6 +6,7 @@ import type { FrameState } from '../anim/timeline';
 import type { Course } from '../course/course';
 import { formatRouteLength, routeLength, routesForLeg, type RouteChoice } from '../course/routes';
 import type { Track } from '../track/track';
+import { decimalSep, type VideoLocale } from '../i18n/core';
 import type { CourseStyle } from './overprint';
 import type { SceneInput, SceneStyle } from './scene';
 
@@ -17,6 +18,8 @@ export interface ProjectScene {
   courseStyle: CourseStyle;
   printScale: number | null;
   routes: RouteChoice[];
+  /** Language of video texts (route length decimal separator). */
+  videoLocale?: VideoLocale;
 }
 
 export function sceneForFrame(fs: FrameState, p: ProjectScene): SceneInput {
@@ -27,7 +30,7 @@ export function sceneForFrame(fs: FrameState, p: ProjectScene): SceneInput {
           points: r.points,
           color: r.color,
           label: r.label,
-          lengthText: formatRouteLength(routeLength(r)),
+          lengthText: formatRouteLength(routeLength(r), decimalSep(p.videoLocale ?? 'en')),
         }))
       : [];
   return {
