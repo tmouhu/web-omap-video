@@ -1,6 +1,6 @@
 # EPIC-3: Orienteering course and GPX alignment
 
-**Type:** Epic · **Status:** New → in refinement · **Labels:** `course`, `gpx`, `orienteering`
+**Type:** Epic · **Status:** In progress (Nov 2026) · **Labels:** `course`, `gpx`, `orienteering`
 
 ## Summary
 Let users set the orienteering course (start, controls, finish), show it in IOF overprint style, fix GPS errors in their track,

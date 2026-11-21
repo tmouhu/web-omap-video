@@ -3,7 +3,9 @@
  * One function draws both the preview overlay and each export frame, so they look identical.
  * Sizes are given in CSS px and multiplied by `pixelRatio`.
  */
-import { forward, gridConvergence, inverse } from '../geo/crs';
+import { forward, gridConvergence, inverse, pointScale } from '../geo/crs';
+import type { Course } from '../course/course';
+import { drawOverprint, type CourseStyle } from './overprint';
 import { toRad } from '../geo/geo';
 import type { ViewState } from '../anim/timeline';
 import type { Track } from '../track/track';
@@ -26,6 +28,14 @@ export interface SceneInput {
   /** Grid heading (deg) for the arrow; null draws a dot. */
   heading: number | null;
   style: SceneStyle;
+  /** Course overprint, drawn between the map and the track. */
+  course?: {
+    course: Course;
+    style: CourseStyle;
+    printScale: number | null;
+    highlightLeg: number | null;
+    selectedId?: string | null;
+  } | null;
 }
 
 const COLORS = {
@@ -81,6 +91,11 @@ export function drawScene(
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const T = makeTransform(view, width, height, pr);
   const { track, time } = scene;
+
+  if (scene.course) {
+    const groundResolution = view.resolution / pointScale(scene.crsCode, inverse(scene.crsCode, view.center));
+    drawOverprint(ctx, T, pr, { crsCode: scene.crsCode, groundResolution, ...scene.course });
+  }
 
   if (track) {
     const xy = projectedTrack(track, scene.crsCode);

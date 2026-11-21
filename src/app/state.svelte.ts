@@ -2,7 +2,22 @@
 import { DEFAULT_FREE_MODE, Timeline, type FreeModeSettings } from '../lib/anim/timeline';
 import { forward, isKnownCrs, selectViewCrs, utmCrs, type CrsInfo } from '../lib/geo/crs';
 import type { LatLon } from '../lib/geo/geo';
-import { GpxError, parseGpx } from '../lib/gpx/gpx';
+import {
+  appendPoint,
+  emptyCourse,
+  finishAtLast,
+  insertControl,
+  isValidCourse,
+  movePoint,
+  removePoint,
+  reorderControl,
+  updatePoint,
+  type Course,
+} from '../lib/course/course';
+import { parseIofCourseData } from '../lib/course/iofxml';
+import { matchCourse, validateOverride, type Passing } from '../lib/course/match';
+import { applyEdits, deleteEditsFor, findOutliers, type GpxEdit } from '../lib/gpx/edits';
+import { GpxError, parseGpx, type GpxData } from '../lib/gpx/gpx';
 import { creditsText, defaultLayers, type LayerDesc } from '../lib/map/layerModel';
 import { fitTransform, type FitResult, type Pt } from '../lib/raster/affine';
 import { isRasterFile, readRasterFiles, type RasterSource } from '../lib/raster/load';
@@ -15,6 +30,7 @@ import {
   type RasterGeoref,
   type RasterMap,
 } from '../lib/raster/rasterMap';
+import { DEFAULT_COURSE_STYLE, type CourseStyle } from '../lib/render/overprint';
 import { DEFAULT_SCENE_STYLE, type SceneStyle } from '../lib/render/scene';
 import { Track } from '../lib/track/track';
 
@@ -47,6 +63,18 @@ export interface GeorefPair {
   target: LatLon;
 }
 
+export type InspectorTab = 'map' | 'course' | 'gpx' | 'video';
+
+/** Map editing tool that owns map clicks/drags (one at a time). */
+export type Tool = 'none' | 'course' | 'gpx' | 'gpx-redraw' | 'pick-passing';
+
+/** Undoable project state (EN-15 lite: snapshots, until the full project model exists). */
+interface Snapshot {
+  course: Course | null;
+  gpxEdits: GpxEdit[];
+  overrides: Record<string, number>;
+}
+
 /** A world-file raster whose CRS could not be determined; waits for the user's choice. */
 export interface PendingRaster {
   source: RasterSource & { georef: { kind: 'affine' } };
@@ -54,8 +82,61 @@ export interface PendingRaster {
 }
 
 class AppState {
-  track = $state.raw<Track | null>(null);
+  /** Original GPX as loaded; never modified (STORY-21). */
+  gpx = $state.raw<GpxData | null>(null);
+  gpxName = $state('');
+  /** Non-destructive edits applied to the original points, in order. */
+  gpxEdits = $state.raw<GpxEdit[]>([]);
+  /** Edit being dragged right now (previewed, committed on release). */
+  dragEdit = $state.raw<GpxEdit | null>(null);
+  /** The edited track used everywhere (playback, matching, export). */
+  track: Track | null = $derived.by(() => {
+    if (!this.gpx) return null;
+    const edits = this.dragEdit ? [...this.gpxEdits, this.dragEdit] : this.gpxEdits;
+    return new Track(this.gpxName, edits.length ? applyEdits(this.gpx.points, edits) : this.gpx.points);
+  });
+  showOriginalGpx = $state(false);
   error = $state('');
+
+  // --- Course (EPIC-3) ---
+  course = $state.raw<Course | null>(null);
+  courseStyle = $state<CourseStyle>({ ...DEFAULT_COURSE_STYLE });
+  courseError = $state('');
+  selectedPointId = $state<string | null>(null);
+  /** Manual passing times: absolute ms (GPX clock) by course point id, so GPX trimming does not move them. */
+  passingOverrides = $state.raw<Record<string, number>>({});
+  matchRadius = $state(50);
+  /** Courses found in an imported IOF XML file with several courses (user picks one). */
+  importedCourses = $state.raw<Course[]>([]);
+  /** Passing times (one per course point) or null when there is no valid course + track. */
+  passings: Passing[] | null = $derived.by(() => {
+    const t = this.track;
+    const c = this.course;
+    if (!t || !isValidCourse(c)) return null;
+    const base = t.startTime ?? 0;
+    const overrides: Record<string, number> = {};
+    for (const [id, abs] of Object.entries(this.passingOverrides)) overrides[id] = (abs - base) / 1000;
+    return matchCourse(t, c, { radius: this.matchRadius, overrides });
+  });
+
+  // --- Tools & selection ---
+  inspectorTab = $state<InspectorTab>('map');
+  tool = $state<Tool>('none');
+  /** Course point whose passing time is picked by clicking the track ('pick-passing'). */
+  pickPassingId = $state<string | null>(null);
+  /** Selected track point index (GPX editor). */
+  selectedTrackIndex = $state<number | null>(null);
+  /** GPX editor brush radius (m): neighbours within it follow a dragged point. */
+  brushRadius = $state(15);
+  /** Time range [a, b] (track s) for range edits, set from the playhead. */
+  editRange = $state<[number | null, number | null]>([null, null]);
+  /** Points of a path being drawn for 'gpx-redraw'. */
+  redrawPath = $state.raw<LatLon[]>([]);
+
+  private undoStack: Snapshot[] = [];
+  private redoStack: Snapshot[] = [];
+  canUndo = $state(false);
+  canRedo = $state(false);
   time = $state(0);
   playing = $state(false);
   speed = $state(1);
@@ -120,7 +201,14 @@ class AppState {
   loadGpxText(text: string, fallbackName = 'GPX track'): boolean {
     try {
       const gpx = parseGpx(text);
-      this.track = new Track(gpx.name || fallbackName, gpx.points);
+      new Track(gpx.name || fallbackName, gpx.points); // validate before replacing the current track
+      this.gpxName = gpx.name || fallbackName;
+      this.gpxEdits = [];
+      this.dragEdit = null;
+      this.passingOverrides = {};
+      this.selectedTrackIndex = null;
+      this.editRange = [null, null];
+      this.gpx = gpx;
       this.time = 0;
       this.playing = false;
       this.error = '';
@@ -135,9 +223,11 @@ class AppState {
   async loadFiles(files: File[]): Promise<void> {
     const gpx = files.find((f) => /\.gpx$/i.test(f.name) || f.type === 'application/gpx+xml');
     const raster = files.filter(isRasterFile);
+    const xml = files.find((f) => /\.xml$/i.test(f.name));
     if (gpx) this.loadGpxText(await gpx.text(), gpx.name.replace(/\.gpx$/i, ''));
     if (raster.length) await this.addRasterFiles(raster);
-    if (!gpx && !raster.length && files.length) {
+    if (xml) this.importCourseXml(await xml.text());
+    if (!gpx && !raster.length && !xml && files.length) {
       this.error = `"${files[0].name}" is not a GPX file or a map image.`;
     }
   }
@@ -313,6 +403,240 @@ class AppState {
   cancelGeoref(): void {
     if (this.georefBackup && this.raster) this.raster = { ...this.raster, georef: this.georefBackup };
     this.finishGeoref();
+  }
+
+  // ---------------- Undo / redo ----------------
+
+  private snapshot(): Snapshot {
+    return { course: this.course, gpxEdits: this.gpxEdits, overrides: this.passingOverrides };
+  }
+
+  private restore(s: Snapshot): void {
+    this.course = s.course;
+    this.gpxEdits = s.gpxEdits;
+    this.passingOverrides = s.overrides;
+    this.selectedTrackIndex = null;
+    if (this.selectedPointId && !s.course?.points.some((p) => p.id === this.selectedPointId))
+      this.selectedPointId = null;
+  }
+
+  /** Call before every undoable change. */
+  pushHistory(): void {
+    this.undoStack.push(this.snapshot());
+    if (this.undoStack.length > 200) this.undoStack.shift();
+    this.redoStack = [];
+    this.canUndo = true;
+    this.canRedo = false;
+  }
+
+  undo(): void {
+    const s = this.undoStack.pop();
+    if (!s) return;
+    this.redoStack.push(this.snapshot());
+    this.restore(s);
+    this.canUndo = this.undoStack.length > 0;
+    this.canRedo = true;
+  }
+
+  redo(): void {
+    const s = this.redoStack.pop();
+    if (!s) return;
+    this.undoStack.push(this.snapshot());
+    this.restore(s);
+    this.canUndo = true;
+    this.canRedo = this.redoStack.length > 0;
+  }
+
+  setInspectorTab(tab: InspectorTab): void {
+    this.inspectorTab = tab;
+    // Tools belong to their tab.
+    if (
+      (tab !== 'course' && (this.tool === 'course' || this.tool === 'pick-passing')) ||
+      (tab !== 'gpx' && this.tool.startsWith('gpx'))
+    ) {
+      this.setTool('none');
+    }
+  }
+
+  setTool(t: Tool): void {
+    if (t !== 'none' && this.georef.active) this.finishGeoref();
+    if (this.tool === 'gpx-redraw' && t !== 'gpx-redraw') this.redrawPath = [];
+    this.tool = this.tool === t ? 'none' : t;
+    if (this.tool !== 'pick-passing') this.pickPassingId = null;
+  }
+
+  // ---------------- Course (STORY-18/19/20) ----------------
+
+  private setCourse(c: Course | null): void {
+    this.pushHistory();
+    this.course = c;
+  }
+
+  courseClick(at: LatLon): void {
+    const c = this.course ?? emptyCourse();
+    this.setCourse(appendPoint(c, at));
+    const pts = this.course!.points;
+    const fi = pts.findIndex((p) => p.kind === 'finish');
+    this.selectedPointId = pts[fi >= 0 ? fi - 1 : pts.length - 1].id;
+  }
+
+  courseFinish(at?: LatLon): void {
+    let c = this.course ?? emptyCourse();
+    if (c.points.some((p) => p.kind === 'finish')) return;
+    this.pushHistory();
+    if (at) c = appendPoint(c, at);
+    this.course = finishAtLast(c);
+  }
+
+  courseInsert(beforeIndex: number, at: LatLon): void {
+    if (!this.course) return;
+    this.setCourse(insertControl(this.course, beforeIndex, at));
+    this.selectedPointId = this.course!.points[beforeIndex].id;
+  }
+
+  /** Live move while dragging; call pushHistory() once when the drag starts. */
+  courseMoveLive(id: string, at: LatLon): void {
+    if (this.course) this.course = movePoint(this.course, id, at);
+  }
+
+  courseRemove(id: string): void {
+    if (!this.course) return;
+    this.setCourse(removePoint(this.course, id));
+    if (this.selectedPointId === id) this.selectedPointId = null;
+    const { [id]: _, ...rest } = this.passingOverrides;
+    this.passingOverrides = rest;
+  }
+
+  courseReorder(id: string, dir: -1 | 1): void {
+    if (this.course) this.setCourse(reorderControl(this.course, id, dir));
+  }
+
+  courseUpdate(id: string, patch: { code?: string; description?: string }): void {
+    if (this.course) this.setCourse(updatePoint(this.course, id, patch));
+  }
+
+  clearCourse(): void {
+    this.setCourse(null);
+    this.passingOverrides = {};
+    this.selectedPointId = null;
+  }
+
+  importCourseXml(xml: string): void {
+    this.courseError = '';
+    try {
+      const f = parseIofCourseData(xml);
+      if (f.mapScale && this.raster && !this.raster.printScale) this.setPrintScale(f.mapScale);
+      if (f.courses.length === 1) this.useImportedCourse(f.courses[0]);
+      else this.importedCourses = f.courses;
+      if (f.skippedControls.length) {
+        this.courseError = `${f.skippedControls.length} control(s) without coordinates were skipped.`;
+      }
+    } catch (e) {
+      this.courseError = (e as Error).message;
+    }
+  }
+
+  useImportedCourse(c: Course): void {
+    this.setCourse(c);
+    this.passingOverrides = {};
+    this.importedCourses = [];
+  }
+
+  // ---------------- Passing times (STORY-22/23) ----------------
+
+  /** Sets a manual passing time (track seconds). Returns an error message or null. */
+  setPassing(pointId: string, t: number): string | null {
+    const track = this.track;
+    const c = this.course;
+    if (!track || !c || !this.passings) return 'No course or track.';
+    t = Math.min(track.duration, Math.max(0, t));
+    const err = validateOverride(c, this.passings, pointId, t);
+    if (err) return err;
+    this.pushHistory();
+    this.passingOverrides = { ...this.passingOverrides, [pointId]: (track.startTime ?? 0) + t * 1000 };
+    return null;
+  }
+
+  resetPassing(pointId?: string): void {
+    this.pushHistory();
+    if (!pointId) this.passingOverrides = {};
+    else {
+      const { [pointId]: _, ...rest } = this.passingOverrides;
+      this.passingOverrides = rest;
+    }
+  }
+
+  isManual(pointId: string): boolean {
+    return pointId in this.passingOverrides;
+  }
+
+  // ---------------- GPX editing (STORY-21) ----------------
+
+  addGpxEdit(e: GpxEdit | GpxEdit[]): void {
+    this.pushHistory();
+    this.gpxEdits = [...this.gpxEdits, ...(Array.isArray(e) ? e : [e])];
+    this.selectedTrackIndex = null;
+  }
+
+  resetGpxEdits(): void {
+    this.pushHistory();
+    this.gpxEdits = [];
+  }
+
+  /** Indices of GPS spikes in the current (edited) track. */
+  outliers(): number[] {
+    if (!this.gpx) return [];
+    return findOutliers(this.gpxEdits.length ? applyEdits(this.gpx.points, this.gpxEdits) : this.gpx.points);
+  }
+
+  removeOutliers(): number {
+    const o = this.outliers();
+    if (o.length) this.addGpxEdit(deleteEditsFor(o));
+    return o.length;
+  }
+
+  /** Track point index closest in time to t (edited track). */
+  indexAtTime(t: number): number {
+    const tr = this.track;
+    if (!tr) return 0;
+    const i = tr.indexAt(t);
+    const next = Math.min(tr.points.length - 1, i + 1);
+    return Math.abs(tr.points[next].t - t) < Math.abs(tr.points[i].t - t) ? next : i;
+  }
+
+  rangeIndices(): [number, number] | null {
+    const [a, b] = this.editRange;
+    if (a === null || b === null || a === b) return null;
+    const i = this.indexAtTime(Math.min(a, b));
+    const j = this.indexAtTime(Math.max(a, b));
+    return j > i ? [i, j] : null;
+  }
+
+  deleteRange(): void {
+    const r = this.rangeIndices();
+    if (r) this.addGpxEdit({ type: 'delete', from: r[0] + 1, to: r[1] - 1 });
+  }
+
+  trimToRange(): void {
+    const r = this.rangeIndices();
+    if (r) {
+      this.addGpxEdit({ type: 'trim', from: r[0], to: r[1] });
+      this.time = 0;
+      this.editRange = [null, null];
+    }
+  }
+
+  commitRedraw(): void {
+    const r = this.rangeIndices();
+    if (r && this.redrawPath.length >= 1) {
+      this.addGpxEdit({ type: 'redraw', from: r[0], to: r[1], path: this.redrawPath });
+    }
+    this.redrawPath = [];
+    this.tool = 'gpx';
+  }
+
+  editedGpxPoints() {
+    return this.gpx ? applyEdits(this.gpx.points, this.gpxEdits) : [];
   }
 
   // ---------------- Layers (STORY-16/17) ----------------

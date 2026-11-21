@@ -3,7 +3,41 @@
   import MapStage from './components/MapStage.svelte';
   import Inspector from './components/Inspector.svelte';
   import TimelineBar from './components/TimelineBar.svelte';
+
+  /** Editing shortcuts: undo/redo, Delete, Enter, Escape (playback keys live in TimelineBar). */
+  function onKey(e: KeyboardEvent) {
+    const el = e.target as HTMLElement;
+    if (el.closest('input:not([type=range]):not([type=checkbox]), select, textarea')) return;
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) app.redo();
+      else app.undo();
+    } else if (mod && e.key.toLowerCase() === 'y') {
+      e.preventDefault();
+      app.redo();
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (app.tool === 'course' && app.selectedPointId) {
+        e.preventDefault();
+        app.courseRemove(app.selectedPointId);
+      } else if (app.tool === 'gpx' && app.selectedTrackIndex !== null) {
+        e.preventDefault();
+        app.addGpxEdit({ type: 'delete', from: app.selectedTrackIndex, to: app.selectedTrackIndex });
+      }
+    } else if (e.key === 'Enter') {
+      if (app.tool === 'course') app.courseFinish();
+      else if (app.tool === 'gpx-redraw') app.commitRedraw();
+    } else if (e.key === 'Escape') {
+      if (app.tool === 'gpx-redraw') {
+        app.redrawPath = [];
+        app.tool = 'gpx';
+      } else if (app.tool !== 'none') app.setTool('none');
+      else if (app.georef.active) app.cancelGeoref();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onKey} />
 
 <div class="shell">
   <header class="top">

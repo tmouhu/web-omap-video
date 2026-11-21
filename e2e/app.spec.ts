@@ -32,10 +32,12 @@ test.beforeEach(async ({ page }) => {
 
 test('loads the sample GPX and picks TM35FIN for a Finnish track', async ({ page }) => {
   await page.getByTestId('load-sample').click();
+  await page.getByTestId('tab-gpx').click();
   const info = page.getByTestId('track-info');
   await expect(info).toContainText('Keskuspuisto sample');
   await expect(info).toContainText('2.99 km');
   await expect(info).toContainText('14:57');
+  await page.getByTestId('tab-map').click();
   await expect(page.getByTestId('crs-tag')).toHaveText('ETRS-TM35FIN');
 });
 
@@ -54,12 +56,13 @@ test('loads a GPX via file input', async ({ page }) => {
     mimeType: 'application/gpx+xml',
     buffer: readFileSync('public/sample.gpx'),
   });
+  await page.getByTestId('tab-gpx').click();
   await expect(page.getByTestId('track-info')).toBeVisible();
 });
 
 test('playback follows the timeline exactly, heading-up; pause returns north-up', async ({ page }) => {
   await page.getByTestId('load-sample').click();
-  await expect(page.getByTestId('track-info')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => !!window.__omv.app.track)).toBe(true);
   await page.getByRole('button', { name: '30×' }).click();
   await page.getByTestId('play').click();
   await page.waitForTimeout(1500);
@@ -89,8 +92,9 @@ test('playback follows the timeline exactly, heading-up; pause returns north-up'
 
 test('scale input sets the map resolution (1:5 000 = half of 1:10 000)', async ({ page }) => {
   await page.getByTestId('load-sample').click();
-  await expect(page.getByTestId('track-info')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => !!window.__omv.app.track)).toBe(true);
   const res = () => page.evaluate(() => window.__omv.map().getView().getResolution());
+  await page.getByTestId('tab-video').click();
   await page.getByTestId('scale').fill('10000');
   await page.getByTestId('scale').press('Enter');
   await page.getByTestId('scale').fill('5000');
@@ -106,8 +110,9 @@ test('scale input sets the map resolution (1:5 000 = half of 1:10 000)', async (
 
 test('exports a frame-exact MP4 with map tiles and downloads it', async ({ page }) => {
   await page.getByTestId('load-sample').click();
-  await expect(page.getByTestId('track-info')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => !!window.__omv.app.track)).toBe(true);
   await page.getByRole('button', { name: '30×' }).click();
+  await page.getByTestId('tab-video').click();
   await page.getByTestId('resolution').selectOption('360');
   await page.evaluate(() => {
     const a = window.__omv.app;

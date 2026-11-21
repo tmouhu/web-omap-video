@@ -38,9 +38,14 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
   `kml.ts` (KMZ/KML GroundOverlay), `rasterMap.ts` (pyramid, georef, `viewAffine`), `load.ts` (file set → source).
 - `src/lib/export/` – `exporter.ts` (off-screen OL map → compose canvases → mediabunny/WebCodecs → streamed file),
   `videoSize.ts` (size, bitrate, frame count). Exporter is lazy-loaded.
+- `src/lib/course/` – `course.ts` (model, legs, labels, edit helpers), `match.ts` (GPX↔course DP matching),
+  `iofxml.ts` (IOF XML 3.0 CourseData). `src/lib/render/overprint.ts` – IOF course symbols (ISOM mm × px/mm).
+- `src/lib/gpx/edits.ts` (non-destructive `GpxEdit` list, spikes), `write.ts` (GPX writer).
+- `src/app/mapTools.ts` – course / GPX / pick-passing tools (OL Pointer interaction + clicks) and preview-only marks.
 - `src/app/` – Svelte UI. `state.svelte.ts` = global `app` state (runes class: track, layers, raster, georef, frame,
-  export). Components: `MapStage` (OL map, layer sync, georef clicks, resize handle), `Inspector`, `MapPanel`,
-  `AddLayerDialog`, `TimelineBar`, `ExportPanel`.
+  export, course, passings, GPX edits, tools, undo). Inspector tabs: Map (`MapPanel`, `AddLayerDialog`),
+  Course (`CoursePanel`), GPX (`GpxPanel`), Video (camera/frame/overlays + `ExportPanel`). `TimelineBar` has
+  draggable control markers and the edit range. `App.svelte` holds edit shortcuts (undo/redo, Delete, Enter, Esc).
 
 ## Rules of thumb
 - Anything that affects a video frame must be a pure function of (project, t). No wall-clock smoothing,
@@ -55,4 +60,9 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
 - Exports always stream to a file (`openExportTarget`): never build whole videos in memory (2 GB Blob limit hit at
   10 min 1080p).
 - Dev-only test hook: `window.__omv = { app, map() }` (MapStage). E2E deletes `showSaveFilePicker` → OPFS path.
+- `app.track` is DERIVED from `app.gpx` (original, never modified) + `app.gpxEdits` (+ `dragEdit` while dragging).
+  Never assign `app.track`. Anything keyed to "a new GPX was loaded" must compare `app.gpx`, not `app.track`.
+- Undoable changes call `app.pushHistory()` first (snapshot of course, GPX edits, passing overrides).
+- Manual passing times are absolute GPX-clock ms (`passingOverrides`); `passings` is derived (matchCourse).
+- Editor-only drawing (selection, track points, ranges) goes in `drawEditorMarks`, never in `drawScene`.
 - Keep `docs/PROGRESS.md` updated when an issue's acceptance criteria change status.

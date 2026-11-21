@@ -45,6 +45,17 @@ Status per backlog issue (see `plan/`). ✅ done · 🟡 partial · ⬜ not star
 | STORY-17 Custom WMS/WMTS | 🟡 | Capabilities fetch + parse (WMS 1.1/1.3, WMTS), layer picker with filter, attribution required, XYZ template; prefers WMTS REST templates. **Missing:** CORS probe before adding, API-key params, personal layer library |
 | EN-11 OMAP/OCD spike | ⬜ | |
 
+## EPIC-3 – Course and GPX alignment (in progress)
+
+| Issue | Status | Notes |
+| --- | --- | --- |
+| STORY-18 Set course | 🟡 | Course tool: click start/controls, double-click (or Enter) finish, drag to move, click a leg to insert, Delete removes; list with codes, ↑↓ reorder, leg lengths; validation; undo/redo. **Missing:** descriptions UI, snapping to raster features, multiple courses per project |
+| STORY-19 IOF overprint | 🟡 | ISOM 2017-2 symbol set (triangle towards control 1, circles, double finish, leg lines with gaps, upright numbers in the widest free sector), show/hide, fixed vs map-scale size, size factor, highlight-leg support for EPIC-4. **Missing:** verify exact dimensions/colour against the standard, ISSprOM sizes, manual line breaks |
+| STORY-20 IOF XML | ✅ | CourseData 3.0 import (several courses → choose; map scale → raster print scale; MapPosition-only controls skipped with a message) and export |
+| STORY-21 GPX editor | 🟡 | Non-destructive edit list (`move` with brush falloff, `delete`, `trim`, `shift`, `redraw`), drag points, delete point, GPS-spike detection + removal, time range from playhead (delete inside / trim / redraw by clicking), snap track to found controls, show original, reset, undo/redo, export edited GPX. **Missing:** linked time/pace chart, shift-range UI, soft-brush preview radius in metres on screen polish |
+| STORY-22 Auto-match | ✅ | Candidates = closest point of each visit inside the radius; DP picks increasing times (butterfly, passed-twice, crossing legs); not-found → closest approach between neighbours; start/finish fall back to track ends; radius slider; < 500 ms for 2 h / 40 controls (unit test) |
+| STORY-23 Manual passings | 🟡 | ±1 s, "now", pick on track (⌖), drag timeline markers, reset per control; stored as absolute GPX-clock ms so trimming does not move them; order validation. **Missing:** typed time entry, ±0.1 s, official split import |
+
 ## Known issues
 - MapAnt's own WMTS capabilities document points to the old `wmts.mapant.fi` host, whose redirect has no CORS header:
   a layer added from those capabilities shows "tiles not loading". The built-in MapAnt layer uses the correct URLs.

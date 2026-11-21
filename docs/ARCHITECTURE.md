@@ -27,6 +27,13 @@ settings (scale, headingUp, lookAhead) ───┘        │  → { view{cente
 - Manual georeferencing: clicks in the same map view; pixel from `viewToPixel`, true point stored as lon/lat;
   `fitTransform` in the current view CRS.
 
+## Course and GPX (EPIC-3)
+- `app.gpx` (original) + `app.gpxEdits` → `applyEdits` → `app.track` (derived). Geometry edits keep point times.
+- `app.passings = matchCourse(track, course, { radius, overrides })`: per course point, candidates are the closest
+  points of each visit inside the radius; a DP chooses strictly increasing times minimising Σ distance + penalty per
+  missing point; manual overrides are fixed candidates.
+- Course overprint is part of `drawScene` (between map and track) so it is in exports; editor marks are not.
+
 ## Coordinate systems
 - proj4 definitions in `lib/geo/crs.ts`, registered with OL in `lib/map/layers.ts` (`registerProjections`).
 - TM35 extent set to the MapAnt tile matrix extent `[-548576, 6291456, 1548576, 8388608]`.

@@ -24,7 +24,7 @@ import type { Timeline } from '../anim/timeline';
 import { createOlLayer, type LayerDesc } from '../map/layerModel';
 import { registerProjections } from '../map/layers';
 import type { RasterMap } from '../raster/rasterMap';
-import { drawScene, type SceneStyle } from '../render/scene';
+import { drawScene, type SceneInput, type SceneStyle } from '../render/scene';
 import { frameCount } from './videoSize';
 
 export interface ExportOptions {
@@ -43,6 +43,8 @@ export interface ExportOptions {
   /** Layer stack (bottom first) and the project's raster map, same as the preview. */
   layers: LayerDesc[];
   raster: RasterMap | null;
+  /** Course overprint (same input the preview uses, without editor selection). */
+  course: SceneInput['course'];
   codec: CodecChoice;
   /** Where the encoded video is streamed (see `openExportTarget`). */
   target: ExportTarget;
@@ -226,6 +228,7 @@ export async function exportVideo(o: ExportOptions): Promise<ExportResult> {
         time: t,
         heading: fs.gridHeading,
         style: o.sceneStyle,
+        course: o.course,
       });
       await source.add(n / o.fps, 1 / o.fps);
       o.onProgress?.(n + 1, total);

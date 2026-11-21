@@ -133,6 +133,7 @@ test('frame can be resized freely and aspect presets still work', async ({ page 
   const after = await page.evaluate(() => ({ ...(window as unknown as Win).__omv.app.frame }));
   expect(after.width).toBeLessThan(before.width - 150);
   expect(after.height).toBeLessThan(before.height - 20);
+  await page.getByTestId('tab-video').click();
   await expect(page.getByRole('button', { name: 'Free' })).toHaveAttribute('aria-pressed', 'true');
 
   await page.getByTestId('frame-width').fill('800');

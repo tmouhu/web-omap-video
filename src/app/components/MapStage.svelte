@@ -20,7 +20,8 @@
   import { apply, type Pt } from '../../lib/raster/affine';
   import { rasterExtent, viewAffine, viewToPixel, type RasterMap } from '../../lib/raster/rasterMap';
   import type { ViewState } from '../../lib/anim/timeline';
-  import type { Track } from '../../lib/track/track';
+  import type { GpxData } from '../../lib/gpx/gpx';
+  import { drawEditorMarks, installTools, syncInteractions } from '../mapTools';
 
   let stageEl: HTMLDivElement;
   let mapEl: HTMLDivElement;
@@ -89,7 +90,8 @@
   // ---------------- Layers and view CRS ----------------
   let currentCrs = '';
   let lastRaster: RasterMap | null = null;
-  let lastTrack: Track | null = null;
+  /** Fit only when a new GPX is loaded – not when edits rebuild the track. */
+  let lastGpx: GpxData | null = null;
   let fittedRasterLevels: ImageBitmap[] | null = null;
   const olLayers = new Map<string, BaseLayer>();
 
@@ -169,20 +171,20 @@
       fittedRasterLevels = raster.levels;
       map!.getView().setRotation(0);
       map!.getView().fit(rasterExtent(raster, crs), { padding: [30, 30, 30, 30] });
-    } else if (app.track && app.track !== lastTrack) {
+    } else if (app.track && app.gpx !== lastGpx) {
       fitTrack();
     }
-    lastTrack = app.track;
+    lastGpx = app.gpx;
     map!.render();
   }
 
-  // New track (CRS unchanged) → fit it.
+  // New GPX (CRS unchanged) → fit it.
   $effect(() => {
-    const t = app.track;
-    if (!mapReady || !t) return;
+    const g = app.gpx;
+    if (!mapReady || !g) return;
     untrack(() => {
-      if (t !== lastTrack && app.crs.code === currentCrs) {
-        lastTrack = t;
+      if (g !== lastGpx && app.crs.code === currentCrs) {
+        lastGpx = g;
         fitTrack();
       }
     });
@@ -231,14 +233,28 @@
       app.georef.active,
       app.georef.pendingPixel,
       app.georef.pairs.length,
+      app.course,
+      app.courseStyle.visible,
+      app.courseStyle.sizeMode,
+      app.courseStyle.sizeFactor,
+      app.courseStyle.showNumbers,
+      app.selectedPointId,
+      app.passings,
+      app.tool,
+      app.selectedTrackIndex,
+      app.brushRadius,
+      app.editRange[0],
+      app.editRange[1],
+      app.redrawPath,
+      app.showOriginalGpx,
     ];
     map?.render();
   });
 
   // Interactions only while paused and not exporting.
   $effect(() => {
-    const active = !app.playing && !app.exporting;
-    if (mapReady) map!.getInteractions().forEach((i) => i.setActive(active));
+    void [app.playing, app.exporting, app.tool];
+    if (mapReady) syncInteractions(map!);
   });
 
   function fitTrack() {
@@ -272,7 +288,18 @@
       time: app.track ? app.time : null,
       heading: tl ? tl.frameStateAt(app.time, app.frame.height).gridHeading : null,
       style: app.style,
+      course:
+        app.course && (app.courseStyle.visible || app.tool === 'course')
+          ? {
+              course: app.course,
+              style: { ...app.courseStyle, visible: true },
+              printScale: app.raster?.printScale ?? null,
+              highlightLeg: null,
+              selectedId: app.tool === 'course' ? app.selectedPointId : null,
+            }
+          : null,
     });
+    drawEditorMarks(ctx, map, pr);
     if (app.georef.active && app.raster) drawGeorefMarks(ctx, vs, pr);
   }
 
@@ -342,6 +369,7 @@
       layers: [],
     });
     map.on('postrender', drawOverlay);
+    const uninstallTools = installTools(map);
     map.on('singleclick', (e) => {
       if (!app.georef.active || !app.raster) return;
       const crs = app.crs.code;
@@ -375,10 +403,11 @@
     raf = requestAnimationFrame(tick);
 
     if (import.meta.env.DEV) {
-      (window as unknown as Record<string, unknown>).__omv = { app, map: () => map };
+      (window as unknown as Record<string, unknown>).__omv = { app, map: () => map, forward };
     }
     return () => {
       cancelAnimationFrame(raf);
+      uninstallTools();
       ro.disconnect();
       map?.setTarget(undefined);
     };
@@ -412,6 +441,7 @@
     class:locked={app.exporting}
     class:dragging
     class:georef={app.georef.active}
+    class:tool={app.tool !== 'none'}
     style:width="{app.frame.width}px"
     style:height="{app.frame.height}px"
     data-testid="map-frame"
@@ -517,6 +547,7 @@
       0 0 0 2px var(--accent),
       var(--shadow);
   }
+  .frame.tool .map,
   .frame.georef .map {
     cursor: crosshair;
   }
