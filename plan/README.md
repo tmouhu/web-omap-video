@@ -191,6 +191,8 @@ many stories.
 | 5 | Rendering | **OpenLayers**, accepted after a performance gate; custom WebGL is the fallback | EN-2, EN-13 |
 | 6 | UI framework | **Svelte 5** | EN-16, EN-7 |
 | 8 | Coordinate system in Finland | **Finnish projects always use TM35FIN**, with or without a raster map | EN-12, STORY-15 |
+| 9 | Map frame content | **Map, route and runner only** (+ optional north arrow). No info box, scale bar or attribution in the video; credits shown in the app for the video description | STORY-8, EN-3 |
+| 10 | Frame size | **Freely resizable** frame plus aspect presets | STORY-1 |
 | 7 | Platform | **Desktop first**; tablet usable, phones view-only | EN-16, STORY-37 |
 
 ### Still open

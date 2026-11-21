@@ -169,3 +169,58 @@ input[type='range'] {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
+/* Inspector building blocks shared by panels */
+.section {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+}
+.sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sec-title {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.note {
+  margin: 0;
+  font-size: 12.5px;
+}
+.note.err {
+  color: var(--danger);
+}
+.note.warn {
+  color: var(--warn);
+}
+.note.ok {
+  color: var(--ok);
+}
+.small {
+  font-size: 12px;
+}
+.btn.sm {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.btn.icon.sm {
+  width: 26px;
+  padding: 0;
+}

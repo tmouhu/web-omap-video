@@ -21,7 +21,9 @@ import {
   type VideoCodec,
 } from 'mediabunny';
 import type { Timeline } from '../anim/timeline';
-import { defaultBackground } from '../map/layers';
+import { createOlLayer, type LayerDesc } from '../map/layerModel';
+import { registerProjections } from '../map/layers';
+import type { RasterMap } from '../raster/rasterMap';
 import { drawScene, type SceneStyle } from '../render/scene';
 import { frameCount } from './videoSize';
 
@@ -38,6 +40,9 @@ export interface ExportOptions {
   endT: number;
   bitrateMbps: number;
   sceneStyle: SceneStyle;
+  /** Layer stack (bottom first) and the project's raster map, same as the preview. */
+  layers: LayerDesc[];
+  raster: RasterMap | null;
   codec: CodecChoice;
   /** Where the encoded video is streamed (see `openExportTarget`). */
   target: ExportTarget;
@@ -160,6 +165,7 @@ export function renderComplete(map: OlMap, timeoutMs: number): Promise<void> {
 export async function exportVideo(o: ExportOptions): Promise<ExportResult> {
   const bitrate = Math.round(o.bitrateMbps * 1e6);
   const choice = o.codec;
+  registerProjections();
   const pixelRatio = o.width / o.cssWidth;
   const total = frameCount(o.endT - o.startT, o.fps, o.speed);
 
@@ -173,16 +179,17 @@ export async function exportVideo(o: ExportOptions): Promise<ExportResult> {
     height: `${o.cssHeight}px`,
   });
   document.body.appendChild(host);
-  const bg = defaultBackground(o.timeline.crsCode);
   const map = new OlMap({
     target: host,
-    layers: bg.map((b) => b.layer),
+    layers: o.layers
+      .filter((d) => d.visible)
+      .map((d) => createOlLayer(d, o.timeline.crsCode, o.raster))
+      .filter((l) => l !== null),
     controls: [],
     interactions: [],
     pixelRatio,
     view: new View({ projection: o.timeline.crsCode, constrainResolution: false, smoothResolutionConstraint: false }),
   });
-  const attribution = bg.map((b) => b.attribution).join(' · ');
 
   const canvas = document.createElement('canvas');
   canvas.width = o.width;
@@ -218,8 +225,6 @@ export async function exportVideo(o: ExportOptions): Promise<ExportResult> {
         track: o.timeline.track,
         time: t,
         heading: fs.gridHeading,
-        speed: o.speed,
-        attribution,
         style: o.sceneStyle,
       });
       await source.add(n / o.fps, 1 / o.fps);

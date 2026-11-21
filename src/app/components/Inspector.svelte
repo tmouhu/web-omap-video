@@ -3,11 +3,13 @@
   import { app, ASPECTS, SCALE_PRESETS } from '../state.svelte';
   import { formatClock, formatDistance, formatDuration } from '../../lib/format';
   import ExportPanel from './ExportPanel.svelte';
+  import MapPanel from './MapPanel.svelte';
 
   const channels = $derived(app.track?.channels);
 </script>
 
 <aside class="inspector" aria-label="Settings">
+  <MapPanel />
   <section>
     <header><h3>Track</h3></header>
     {#if app.track}
@@ -41,7 +43,7 @@
           disabled={app.exporting}
           onchange={(e) => {
             const f = (e.currentTarget as HTMLInputElement).files?.[0];
-            if (f) app.loadFile(f);
+            if (f) app.loadFiles([f]);
           }}
         />
       </label>
@@ -105,26 +107,46 @@
         <button
           aria-pressed={Math.abs(app.aspect - a.value) < 1e-6}
           disabled={app.locked}
-          onclick={() => (app.aspect = a.value)}
+          onclick={() => app.setAspect(a.value)}
         >
           {a.label}
         </button>
       {/each}
+      <button aria-pressed={!!app.frameCustom} disabled title="Drag the frame's corner to resize freely">Free</button>
     </div>
+    <div class="size">
+      <input
+        type="number"
+        aria-label="Frame width (px)"
+        data-testid="frame-width"
+        min="160"
+        value={app.frame.width}
+        disabled={app.locked}
+        onchange={(e) => app.setFrameSize(+(e.currentTarget as HTMLInputElement).value, app.frame.height)}
+      />
+      <span class="muted">×</span>
+      <input
+        type="number"
+        aria-label="Frame height (px)"
+        data-testid="frame-height"
+        min="90"
+        value={app.frame.height}
+        disabled={app.locked}
+        onchange={(e) => app.setFrameSize(app.frame.width, +(e.currentTarget as HTMLInputElement).value)}
+      />
+      <span class="muted mono small">{(app.frame.width / Math.max(1, app.frame.height)).toFixed(3)}:1</span>
+    </div>
+    <small class="muted">
+      Drag the frame's corner to resize (Shift keeps the ratio). The video shows the same area.
+    </small>
   </section>
 
   <section>
     <header><h3>Overlays</h3></header>
     <label class="check">
-      <input type="checkbox" bind:checked={app.style.showInfo} disabled={app.locked} /> Info box (time, distance, pace)
-    </label>
-    <label class="check">
       <input type="checkbox" bind:checked={app.style.showNorthArrow} disabled={app.locked} /> North arrow
     </label>
-    <label class="check">
-      <input type="checkbox" bind:checked={app.style.showScaleBar} disabled={app.locked} /> Scale bar
-    </label>
-    <small class="muted">Map attribution is always shown (licence requirement).</small>
+    <small class="muted">The video shows only the map, the route and the runner.</small>
   </section>
 
   <ExportPanel />
@@ -211,6 +233,12 @@
   .small {
     font-size: 13px;
     margin: 0;
+  }
+  .size {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto;
+    align-items: center;
+    gap: 6px;
   }
   .replace {
     justify-self: start;

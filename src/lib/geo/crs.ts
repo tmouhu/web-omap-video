@@ -21,14 +21,35 @@ export function utmZone(lon: number): number {
 }
 
 /** WGS84 UTM CRS for a location (registers the proj4 definition on demand). */
+const utmCache = new Map<string, CrsInfo>();
+
+/** WGS84 UTM CRS for a location (registers the proj4 definition on demand; same object per zone). */
 export function utmCrs(p: LatLon): CrsInfo {
   const zone = utmZone(p.lon);
   const south = p.lat < 0;
   const code = `EPSG:${south ? 327 : 326}${String(zone).padStart(2, '0')}`;
-  if (!proj4.defs(code)) {
+  let info = utmCache.get(code);
+  if (!info) {
     proj4.defs(code, `+proj=utm +zone=${zone}${south ? ' +south' : ''} +datum=WGS84 +units=m +no_defs +type=crs`);
+    utmCache.set(code, (info = { code, name: `UTM zone ${zone}${south ? 'S' : 'N'}` }));
   }
-  return { code, name: `UTM zone ${zone}${south ? 'S' : 'N'}` };
+  return info;
+}
+
+/** True when proj4 knows the CRS code (built-in, TM35FIN or a registered UTM zone). */
+export function isKnownCrs(code: string): boolean {
+  if (/^EPSG:32[67]\d\d$/.test(code)) {
+    const zone = +code.slice(-2);
+    utmCrs({ lat: code.startsWith('EPSG:327') ? -10 : 10, lon: zone * 6 - 183 });
+  }
+  return !!proj4.defs(code);
+}
+
+export function crsName(code: string): string {
+  if (code === TM35FIN.code) return TM35FIN.name;
+  if (code === WEB_MERCATOR.code) return WEB_MERCATOR.name;
+  if (code === 'EPSG:4326') return 'WGS84 (lon/lat)';
+  return utmCache.get(code)?.name ?? code;
 }
 
 export interface CrsSelectionInput {

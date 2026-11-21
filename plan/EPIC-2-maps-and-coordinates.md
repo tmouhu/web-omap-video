@@ -1,6 +1,6 @@
 # EPIC-2: Orienteering maps, background layers and coordinate systems
 
-**Type:** Epic · **Status:** New → in refinement · **Labels:** `map`, `crs`, `georef`
+**Type:** Epic · **Status:** In progress (Nov 2026) · **Labels:** `map`, `crs`, `georef`
 
 ## Summary
 Let users show their run on the **real orienteering map**, on top of good background maps, in the right coordinate

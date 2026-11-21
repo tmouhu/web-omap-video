@@ -19,7 +19,9 @@ so that **the replay (and the exported video) fits where I will place it**, e.g.
 - [ ] Safe-area guides can be shown on the frame (e.g. where the data components or a PiP border will sit).
       The insets feed into the camera fit ([EN-14](../enablers/EN-14-animation-timeline-camera.md)).
 - [ ] The frame settings are stored in the project ([EN-15](../enablers/EN-15-project-model-and-persistence.md)).
-- [ ] Width/height can be typed in as exact numbers.
+- [x] Width/height can be typed in as exact numbers.
+- [x] **Free resize (decision Nov 2026):** the frame's corner handle resizes it freely (Shift keeps the ratio); presets still
+      fit the largest frame of that ratio into the stage.
 
 ## POC reference
 - `index.html` (`#map-window`, `#aspect-buttons`), `src/style.css` (`.map-window { resize: both }`, `.locked`)

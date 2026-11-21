@@ -14,6 +14,7 @@
   // Lazy: mediabunny + export code load only when the export panel needs them.
   const exporter = () => import('../../lib/export/exporter');
   import { formatDuration } from '../../lib/format';
+  import type { LayerDesc } from '../../lib/map/layerModel';
 
   let abort: AbortController | null = null;
   let codecInfo = $state<string>('checking…');
@@ -92,6 +93,8 @@
         endT: app.track.duration,
         bitrateMbps: mbps,
         sceneStyle: $state.snapshot(app.style),
+        layers: $state.snapshot(app.layers) as LayerDesc[],
+        raster: app.raster,
         signal: abort.signal,
         onProgress: (done, total) => {
           app.exportProgress = { done, total, startedAt: t0 };

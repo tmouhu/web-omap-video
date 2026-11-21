@@ -36,11 +36,11 @@ test('loads the sample GPX and picks TM35FIN for a Finnish track', async ({ page
   await expect(info).toContainText('Keskuspuisto sample');
   await expect(info).toContainText('2.99 km');
   await expect(info).toContainText('14:57');
-  await expect(page.getByText('ETRS-TM35FIN')).toBeVisible();
+  await expect(page.getByTestId('crs-tag')).toHaveText('ETRS-TM35FIN');
 });
 
 test('shows a clear error for an invalid GPX file', async ({ page }) => {
-  await page.getByTestId('gpx-input').setInputFiles({
+  await page.getByTestId('file-input').setInputFiles({
     name: 'broken.gpx',
     mimeType: 'application/gpx+xml',
     buffer: Buffer.from('<gpx><trk>'),
@@ -49,7 +49,7 @@ test('shows a clear error for an invalid GPX file', async ({ page }) => {
 });
 
 test('loads a GPX via file input', async ({ page }) => {
-  await page.getByTestId('gpx-input').setInputFiles({
+  await page.getByTestId('file-input').setInputFiles({
     name: 'run.gpx',
     mimeType: 'application/gpx+xml',
     buffer: readFileSync('public/sample.gpx'),

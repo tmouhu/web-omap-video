@@ -1,76 +1,195 @@
 <script lang="ts">
   /**
-   * Central map stage: the preview frame (exact video framing), OpenLayers background, scene overlay
-   * canvas, drag-and-drop of GPX files and the playback loop.
+   * Central map stage: the preview frame (exact video framing, freely resizable), the OpenLayers layer
+   * stack from `app.layers`, the scene overlay canvas, drag-and-drop of GPX/map files, map clicks for
+   * georeferencing, and the playback loop.
    * Playing → view comes from timeline.frameStateAt(t) (what the export renders).
    * Paused → free pan/zoom, north-up (STORY-5/7).
    */
   import OlMap from 'ol/Map';
   import View from 'ol/View';
+  import type BaseLayer from 'ol/layer/Base';
   import { defaults as defaultInteractions } from 'ol/interaction/defaults';
   import { boundingExtent } from 'ol/extent';
   import { onMount, untrack } from 'svelte';
-  import { app } from '../state.svelte';
-  import { defaultBackground } from '../../lib/map/layers';
-  import { drawScene, projectedTrack } from '../../lib/render/scene';
+  import { app, MIN_FRAME } from '../state.svelte';
+  import { createOlLayer, type LayerDesc } from '../../lib/map/layerModel';
+  import { registerProjections } from '../../lib/map/layers';
+  import { drawScene, makeTransform, projectedTrack } from '../../lib/render/scene';
+  import { forward, inverse, pointScale } from '../../lib/geo/crs';
+  import { apply, type Pt } from '../../lib/raster/affine';
+  import { rasterExtent, viewAffine, viewToPixel, type RasterMap } from '../../lib/raster/rasterMap';
   import type { ViewState } from '../../lib/anim/timeline';
+  import type { Track } from '../../lib/track/track';
 
   let stageEl: HTMLDivElement;
   let mapEl: HTMLDivElement;
   let overlayEl: HTMLCanvasElement;
   let map: OlMap | undefined;
-  let attribution = '';
+  let mapReady = $state(false);
   let dragging = $state(false);
   let stage = $state({ width: 0, height: 0 });
   let wasPlaying = false;
+  const PAD = 28;
 
-  // Fit the frame of the chosen aspect ratio into the stage.
+  // ---------------- Frame size ----------------
   $effect(() => {
-    const pad = 28;
-    const sw = Math.max(0, stage.width - pad * 2);
-    const sh = Math.max(0, stage.height - pad * 2);
-    const w = Math.max(160, Math.floor(Math.min(sw, sh * app.aspect)));
-    const h = Math.max(90, Math.floor(w / app.aspect));
-    app.frame = { width: w, height: h };
+    const sw = Math.max(MIN_FRAME.width, stage.width - PAD * 2);
+    const sh = Math.max(MIN_FRAME.height, stage.height - PAD * 2);
+    const custom = app.frameCustom;
+    let w: number;
+    let h: number;
+    if (custom) {
+      // Free size, scaled down (keeping its shape) if the stage got smaller.
+      const k = Math.min(1, sw / custom.width, sh / custom.height);
+      w = Math.floor(custom.width * k);
+      h = Math.floor(custom.height * k);
+    } else {
+      w = Math.floor(Math.min(sw, sh * app.aspect));
+      h = Math.floor(w / app.aspect);
+    }
+    app.frame = { width: Math.max(MIN_FRAME.width, w), height: Math.max(MIN_FRAME.height, h) };
   });
 
   $effect(() => {
     const { width, height } = app.frame;
-    if (!map || !overlayEl || width === 0) return;
+    if (!mapReady || !overlayEl || width === 0) return;
     const dpr = window.devicePixelRatio || 1;
     overlayEl.width = Math.round(width * dpr);
     overlayEl.height = Math.round(height * dpr);
-    map.updateSize();
-    map.render();
+    map!.updateSize();
+    map!.render();
   });
 
-  // (Re)build view and background when the view CRS changes.
+  let resizeStart: { x: number; y: number; w: number; h: number } | null = null;
+  function onResizeDown(e: PointerEvent) {
+    if (app.locked) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    resizeStart = { x: e.clientX, y: e.clientY, w: app.frame.width, h: app.frame.height };
+  }
+  function onResizeMove(e: PointerEvent) {
+    if (!resizeStart) return;
+    const maxW = stage.width - PAD * 2;
+    const maxH = stage.height - PAD * 2;
+    // The frame is centred, so the corner moves half of the size change.
+    let w = Math.min(maxW, Math.max(MIN_FRAME.width, resizeStart.w + 2 * (e.clientX - resizeStart.x)));
+    let h = Math.min(maxH, Math.max(MIN_FRAME.height, resizeStart.h + 2 * (e.clientY - resizeStart.y)));
+    if (e.shiftKey) {
+      // Shift keeps the current aspect ratio.
+      const a = resizeStart.w / resizeStart.h;
+      h = Math.min(maxH, w / a);
+      w = h * a;
+    }
+    app.setFrameSize(w, h);
+  }
+  function onResizeUp() {
+    resizeStart = null;
+  }
+
+  // ---------------- Layers and view CRS ----------------
+  let currentCrs = '';
+  let lastRaster: RasterMap | null = null;
+  let lastTrack: Track | null = null;
+  let fittedRasterLevels: ImageBitmap[] | null = null;
+  const olLayers = new Map<string, BaseLayer>();
+
   $effect(() => {
-    const crs = app.crs;
-    if (!map) return;
-    const bg = defaultBackground(crs.code);
-    attribution = bg.map((b) => b.attribution).join(' · ');
-    map.getLayers().clear();
-    bg.forEach((b) => map!.addLayer(b.layer));
-    map.setView(
-      new View({
-        projection: crs.code,
-        center: crs.code === 'EPSG:3067' ? [430000, 7200000] : [2700000, 8500000],
-        resolution: crs.code === 'EPSG:3067' ? 1600 : 2500,
-        constrainResolution: false,
-        smoothResolutionConstraint: false,
-      }),
+    const crs = app.crs.code;
+    const raster = app.raster;
+    const descs = $state.snapshot(app.layers) as LayerDesc[];
+    if (!mapReady) return;
+    untrack(() => syncLayers(crs, raster, descs));
+  });
+
+  function switchView(crs: string) {
+    registerProjections(); // also picks up UTM zones defined since the last call
+    const old = map!.getView();
+    const oc = old.getCenter();
+    const or = old.getResolution();
+    let center: number[] = crs === 'EPSG:3067' ? [430000, 7200000] : [2700000, 8500000];
+    let resolution = crs === 'EPSG:3067' ? 1600 : 2500;
+    if (currentCrs && oc && or) {
+      const ll = inverse(currentCrs, oc as Pt);
+      center = forward(crs, ll);
+      resolution = (or * pointScale(crs, ll)) / pointScale(currentCrs, ll);
+    }
+    map!.setView(
+      new View({ projection: crs, center, resolution, constrainResolution: false, smoothResolutionConstraint: false }),
     );
-    if (app.track) fitTrack();
-  });
+    map!.getView().on('change:center', () => {
+      const c = map!.getView().getCenter();
+      if (c) app.viewCenter = c as Pt;
+    });
+  }
 
-  // New track → fit it.
+  /** Counts tile loads/errors so the layer list can flag services whose tiles never load (CORS etc.). */
+  function watchTiles(id: string, layer: BaseLayer) {
+    const source = (
+      layer as unknown as { getSource?: () => { on?: (t: string, f: () => void) => void } }
+    ).getSource?.();
+    if (!source?.on) return;
+    const bump = (key: 'ok' | 'error') => {
+      const h = app.layerHealth[id] ?? { ok: 0, error: 0 };
+      app.layerHealth[id] = { ...h, [key]: h[key] + 1 };
+    };
+    source.on('tileloadend', () => bump('ok'));
+    source.on('tileloaderror', () => bump('error'));
+  }
+
+  function syncLayers(crs: string, raster: RasterMap | null, descs: LayerDesc[]) {
+    if (crs !== currentCrs) {
+      switchView(crs);
+      currentCrs = crs;
+      olLayers.clear();
+    }
+    if (raster !== lastRaster) olLayers.delete('raster');
+    lastRaster = raster;
+    const ids = new Set(descs.map((d) => d.id));
+    for (const id of [...olLayers.keys()]) if (!ids.has(id)) olLayers.delete(id);
+    const stack: BaseLayer[] = [];
+    for (const d of descs) {
+      let l = olLayers.get(d.id);
+      if (!l) {
+        l = createOlLayer(d, crs, raster) ?? undefined;
+        if (l) {
+          olLayers.set(d.id, l);
+          watchTiles(d.id, l);
+        }
+      }
+      if (!l) continue;
+      l.setVisible(d.visible);
+      l.setOpacity(d.opacity);
+      stack.push(l);
+    }
+    const coll = map!.getLayers();
+    coll.clear();
+    coll.extend(stack);
+    // Fit newly added data: a new raster (not a georeference update) or a new track.
+    if (raster && raster.levels !== fittedRasterLevels) {
+      fittedRasterLevels = raster.levels;
+      map!.getView().setRotation(0);
+      map!.getView().fit(rasterExtent(raster, crs), { padding: [30, 30, 30, 30] });
+    } else if (app.track && app.track !== lastTrack) {
+      fitTrack();
+    }
+    lastTrack = app.track;
+    map!.render();
+  }
+
+  // New track (CRS unchanged) → fit it.
   $effect(() => {
-    if (app.track && map) fitTrack();
+    const t = app.track;
+    if (!mapReady || !t) return;
+    untrack(() => {
+      if (t !== lastTrack && app.crs.code === currentCrs) {
+        lastTrack = t;
+        fitTrack();
+      }
+    });
   });
 
-  // Paused: north-up again, follow seeks (STORY-4/5). Only reacts to time/playing changes, so a
-  // freshly loaded track keeps its fitted view.
+  // ---------------- Playback / paused behaviour ----------------
+  // Paused: north-up again, follow seeks (STORY-4/5). Only reacts to time/playing changes.
   let lastTime = 0;
   $effect(() => {
     const t = app.time;
@@ -106,14 +225,20 @@
 
   // Redraw the overlay when anything drawn on it changes.
   $effect(() => {
-    void [app.style.showInfo, app.style.showNorthArrow, app.style.showScaleBar, app.free.headingUp, app.speed];
+    void [
+      app.style.showNorthArrow,
+      app.free.headingUp,
+      app.georef.active,
+      app.georef.pendingPixel,
+      app.georef.pairs.length,
+    ];
     map?.render();
   });
 
   // Interactions only while paused and not exporting.
   $effect(() => {
     const active = !app.playing && !app.exporting;
-    map?.getInteractions().forEach((i) => i.setActive(active));
+    if (mapReady) map!.getInteractions().forEach((i) => i.setActive(active));
   });
 
   function fitTrack() {
@@ -125,26 +250,76 @@
     map.getView().fit(boundingExtent(coords), { padding: [40, 40, 60, 40] });
   }
 
+  function currentViewState(): ViewState | null {
+    const view = map!.getView();
+    const center = view.getCenter();
+    const resolution = view.getResolution();
+    if (!center || !resolution) return null;
+    return { center: center as [number, number], resolution, rotation: view.getRotation() };
+  }
+
   function drawOverlay() {
     if (!map || !overlayEl) return;
     const ctx = overlayEl.getContext('2d')!;
     ctx.clearRect(0, 0, overlayEl.width, overlayEl.height);
-    const view = map.getView();
-    const center = view.getCenter();
-    const resolution = view.getResolution();
-    if (!center || !resolution) return;
-    const vs: ViewState = { center: center as [number, number], resolution, rotation: view.getRotation() };
+    const vs = currentViewState();
+    if (!vs) return;
+    const pr = overlayEl.width / app.frame.width;
     const tl = app.timeline;
-    const heading = tl ? tl.frameStateAt(app.time, app.frame.height).gridHeading : null;
-    drawScene(ctx, overlayEl.width, overlayEl.height, overlayEl.width / app.frame.width, vs, {
+    drawScene(ctx, overlayEl.width, overlayEl.height, pr, vs, {
       crsCode: app.crs.code,
       track: app.track,
       time: app.track ? app.time : null,
-      heading,
-      speed: app.speed,
-      attribution,
+      heading: tl ? tl.frameStateAt(app.time, app.frame.height).gridHeading : null,
       style: app.style,
     });
+    if (app.georef.active && app.raster) drawGeorefMarks(ctx, vs, pr);
+  }
+
+  /** Point pairs while georeferencing (preview only, never exported). */
+  function drawGeorefMarks(ctx: CanvasRenderingContext2D, vs: ViewState, pr: number) {
+    const raster = app.raster!;
+    const crs = app.crs.code;
+    const T = makeTransform(vs, overlayEl.width, overlayEl.height, pr);
+    const A = viewAffine(raster, crs);
+    const dot = (p: Pt, fill: string, r = 6) => {
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], r * pr, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.lineWidth = 2 * pr;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+    };
+    ctx.save();
+    ctx.font = `700 ${11 * pr}px Inter, system-ui, sans-serif`;
+    app.georef.pairs.forEach((pair, i) => {
+      const img = T(...apply(A, pair.pixel));
+      const tgt = T(...forward(crs, pair.target));
+      ctx.beginPath();
+      ctx.moveTo(...img);
+      ctx.lineTo(...tgt);
+      ctx.strokeStyle = 'rgba(20,20,20,0.8)';
+      ctx.lineWidth = 2 * pr;
+      ctx.setLineDash([4 * pr, 3 * pr]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      dot(img, '#2f80ff', 5);
+      dot(tgt, '#ff6a2b', 6);
+      ctx.fillStyle = '#111';
+      ctx.fillText(String(i + 1), tgt[0] + 9 * pr, tgt[1] - 8 * pr);
+    });
+    const pending = app.georef.pendingPixel;
+    if (pending) {
+      const p = T(...apply(A, pending));
+      dot(p, '#2f80ff', 7);
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], 13 * pr, 0, Math.PI * 2);
+      ctx.strokeStyle = '#2f80ff';
+      ctx.lineWidth = 2 * pr;
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function applyFrame() {
@@ -167,8 +342,17 @@
       layers: [],
     });
     map.on('postrender', drawOverlay);
-    // Trigger the CRS effect now that the map exists.
-    app.crs = { ...app.crs };
+    map.on('singleclick', (e) => {
+      if (!app.georef.active || !app.raster) return;
+      const crs = app.crs.code;
+      const raster = app.raster;
+      app.georefClick(
+        e.coordinate as Pt,
+        (xy) => viewToPixel(raster, crs, xy),
+        (xy) => inverse(crs, xy),
+      );
+    });
+    mapReady = true;
 
     const ro = new ResizeObserver(([e]) => {
       stage = { width: e.contentRect.width, height: e.contentRect.height };
@@ -204,9 +388,11 @@
     e.preventDefault();
     dragging = false;
     if (app.exporting) return;
-    const file = e.dataTransfer?.files[0];
-    if (file) app.loadFile(file);
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length) app.loadFiles(files);
   }
+
+  const accept = '.gpx,.jpg,.jpeg,.png,.gif,.webp,.bmp,.kmz,.kml,.prj,.jgw,.jpgw,.pgw,.pngw,.tfw,.gfw,.wld';
 </script>
 
 <div
@@ -225,6 +411,7 @@
     class="frame"
     class:locked={app.exporting}
     class:dragging
+    class:georef={app.georef.active}
     style:width="{app.frame.width}px"
     style:height="{app.frame.height}px"
     data-testid="map-frame"
@@ -232,7 +419,7 @@
     <div class="map" bind:this={mapEl}></div>
     <canvas class="overlay" bind:this={overlayEl} data-testid="overlay"></canvas>
 
-    {#if !app.track}
+    {#if !app.track && !app.raster}
       <div class="empty">
         <div class="card">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
@@ -242,29 +429,55 @@
               stroke-linejoin="round"
             />
           </svg>
-          <h2>Drop a GPX file here</h2>
-          <p>Your file is processed on this device and never uploaded.</p>
+          <h2>Drop a GPX file or a map image</h2>
+          <p>
+            GPX tracks, orienteering map images (JPG/PNG + world file) or KMZ. Files are processed on this device and
+            never uploaded.
+          </p>
           <div class="row">
             <label class="btn primary">
-              Choose GPX…
+              Choose files…
               <input
                 type="file"
-                accept=".gpx,application/gpx+xml"
+                multiple
+                {accept}
                 hidden
-                data-testid="gpx-input"
+                data-testid="file-input"
                 onchange={(e) => {
-                  const f = (e.currentTarget as HTMLInputElement).files?.[0];
-                  if (f) app.loadFile(f);
+                  const files = Array.from((e.currentTarget as HTMLInputElement).files ?? []);
+                  if (files.length) app.loadFiles(files);
                 }}
               />
             </label>
-            <button class="btn" onclick={() => app.loadSample()} data-testid="load-sample">Load sample</button>
+            <button class="btn" onclick={() => app.loadSample()} data-testid="load-sample">Load sample GPX</button>
           </div>
           {#if app.error}<p class="error" role="alert">{app.error}</p>{/if}
         </div>
       </div>
     {/if}
-    {#if dragging}<div class="dropzone">Drop GPX to load</div>{/if}
+    {#if dragging}<div class="dropzone">Drop GPX or map files</div>{/if}
+    {#if app.georef.active}
+      <div class="georef-hint" data-testid="georef-hint">
+        {#if app.georef.pendingPixel}
+          <b>Step 2:</b> click the true position of that point on the background map
+        {:else}
+          <b>Step 1:</b> click a distinctive point on your map image (e.g. a path crossing)
+        {/if}
+      </div>
+    {/if}
+    {#if !app.locked}
+      <div
+        class="resize"
+        role="separator"
+        aria-label="Resize frame (Shift keeps aspect ratio)"
+        title="Drag to resize · Shift keeps the aspect ratio"
+        data-testid="frame-resize"
+        onpointerdown={onResizeDown}
+        onpointermove={onResizeMove}
+        onpointerup={onResizeUp}
+        onpointercancel={onResizeUp}
+      ></div>
+    {/if}
   </div>
   <div class="frame-caption mono">
     {app.frame.width} × {app.frame.height} px · {app.crs.name}
@@ -298,10 +511,14 @@
       0 0 0 2px var(--danger),
       var(--shadow);
   }
-  .frame.dragging {
+  .frame.dragging,
+  .frame.georef {
     box-shadow:
       0 0 0 2px var(--accent),
       var(--shadow);
+  }
+  .frame.georef .map {
+    cursor: crosshair;
   }
   .map,
   .overlay {
@@ -312,6 +529,45 @@
   }
   .overlay {
     pointer-events: none;
+  }
+  .resize {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+    touch-action: none;
+    background:
+      linear-gradient(
+        135deg,
+        transparent 50%,
+        rgba(255, 255, 255, 0.9) 50%,
+        rgba(255, 255, 255, 0.9) 58%,
+        transparent 58%
+      ),
+      linear-gradient(
+        135deg,
+        transparent 68%,
+        rgba(255, 255, 255, 0.9) 68%,
+        rgba(255, 255, 255, 0.9) 76%,
+        transparent 76%
+      ),
+      rgba(13, 16, 20, 0.55);
+    border-top-left-radius: 6px;
+  }
+  .georef-hint {
+    position: absolute;
+    left: 50%;
+    top: 10px;
+    transform: translateX(-50%);
+    padding: 7px 12px;
+    border-radius: 8px;
+    background: rgba(13, 16, 20, 0.85);
+    color: #fff;
+    font-size: 12.5px;
+    pointer-events: none;
+    white-space: nowrap;
   }
   .empty {
     position: absolute;
@@ -328,7 +584,7 @@
     background: var(--bg-elev);
     border: 1px solid var(--border);
     box-shadow: var(--shadow);
-    max-width: 380px;
+    max-width: 420px;
     color: var(--text);
   }
   .card svg {

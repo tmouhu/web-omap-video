@@ -2,8 +2,7 @@ import { deflateSync } from 'node:zlib';
 import { test as base, type Page } from '@playwright/test';
 
 /** 256×256 checkerboard PNG (dark/light 32 px squares) so tests can detect drawn tiles. */
-function checkerPng(): Buffer {
-  const size = 256;
+export function checkerPng(size = 256): Buffer {
   const raw = Buffer.alloc(size * (size * 3 + 1));
   for (let y = 0; y < size; y++) {
     raw[y * (size * 3 + 1)] = 0;
@@ -46,7 +45,7 @@ function checkerPng(): Buffer {
   ]);
 }
 
-const PNG = checkerPng();
+const PNG = checkerPng(256);
 
 /** Stubs all map tile hosts with a CORS-enabled PNG: no network, no load on MapAnt/OSM. */
 export async function stubTiles(page: Page): Promise<void> {

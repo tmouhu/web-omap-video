@@ -18,7 +18,7 @@ and long (1–2 h) exports.
 - GPX upload incl. heart rate / elevation data.
 - Preview playback with timeline (default 1×), the same as the export at every frame.
 - Free mode (no course): follow position, heading-up rotation, fixed scale.
-- Map overlays (scale bar, north arrow, attribution, info box, leg indicator).
+- North arrow overlay only (no info box, scale bar or attribution in the frame – decision Nov 2026).
 - Frame-exact video export (WebCodecs, MediaRecorder fallback), format choice, saving to disk.
 - Quality foundations: CI, tests, browser matrix.
 

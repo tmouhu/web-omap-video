@@ -19,6 +19,14 @@ settings (scale, headingUp, lookAhead) ───┘        │  → { view{cente
 - Ground area of the video = ground area of the preview frame (resolution is per CSS px; pixelRatio scales).
 - Tiles: export waits for OL `rendercomplete` per frame (15 s timeout), replacing bulk prefetch (EN-6).
 
+## Layers (EPIC-2)
+- `app.layers: LayerDesc[]` (bottom first) is the single source; `createOlLayer(desc, viewCrs, raster)` builds OL layers
+  for both the preview (`MapStage.syncLayers`, cached per id, rebuilt on CRS/raster change) and the export map.
+- Raster maps: pixel→CRS affine (corner convention). Drawn by an `ImageCanvas` source: canvas transform =
+  affine × (extent, resolution, pixelRatio); pyramid level chosen so one image pixel ≈ ≥1 canvas pixel.
+- Manual georeferencing: clicks in the same map view; pixel from `viewToPixel`, true point stored as lon/lat;
+  `fitTransform` in the current view CRS.
+
 ## Coordinate systems
 - proj4 definitions in `lib/geo/crs.ts`, registered with OL in `lib/map/layers.ts` (`registerProjections`).
 - TM35 extent set to the MapAnt tile matrix extent `[-548576, 6291456, 1548576, 8388608]`.

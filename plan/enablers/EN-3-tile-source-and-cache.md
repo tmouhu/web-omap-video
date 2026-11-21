@@ -50,7 +50,8 @@ scanning data. Checked on 21 Nov 2026:
 - [ ] **Persistent tile cache** (Cache API, size limit) so that repeated previews and re-exports do not download the same
       tiles again.
 - [ ] If MapAnt is unavailable, the user sees a clear message and can switch to the fallback layer.
-- [ ] Attribution is collected from all visible layers and always drawn in the frame (licence requirement).
+- [x] Attribution is collected from all visible layers and shown in the app with a *Copy* button for the video description
+      (not drawn in the frame – product decision, Nov 2026).
 - [ ] *(POC)* In-memory LRU-ish cache, `get` / `peek` / `load`, `onTileLoaded`. With OpenLayers
       ([EN-2](./EN-2-canvas-map-renderer.md)) the OL tile cache plus a Cache-API-backed `tileLoadFunction` replace this.
 

@@ -19,6 +19,9 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
 - Background: **MapAnt** WMTS (TM35 service in TM35 view, 3857 service in Web Mercator). No API key. Be polite
   (no bulk hammering); out-of-coverage tiles redirect to a non-CORS PNG → treated as empty.
 - Video: **opaque** standard files, MP4/H.264 preferred (WebM fallback). No alpha. No head cam loading/sync in app.
+- Map frame content: **map + route + runner (+ optional north arrow) only.** No info box, scale bar or attribution in the
+  video; layer credits are shown in the app (Copy button) for the video description.
+- Frame: freely resizable (corner handle, Shift keeps ratio) + aspect presets + typed W×H.
 - "Phase" in requirements = **pace (min/km)**. Distances: `< 1 km → "840 m"`, else `"1.24 km"` (`lib/format.ts`).
 
 ## Code map
@@ -28,15 +31,24 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
 - `src/lib/anim/timeline.ts` – **`Timeline.frameStateAt(t, frameCssHeight)`: pure, deterministic**. Preview and
   export both use it. Course mode (EPIC-4) goes here.
 - `src/lib/render/scene.ts` – `drawScene()` draws track, arrow, overlays on a 2D canvas for preview AND export.
-- `src/lib/map/layers.ts` – OL background layers, proj4 registration.
+- `src/lib/map/` – `layers.ts` (MapAnt/OSM constants, `registerProjections()` – call before creating any OL View),
+  `layerModel.ts` (`LayerDesc` → `createOlLayer`, credits, native/reprojected), `rasterLayer.ts` (affine raster via
+  ImageCanvas), `capabilities.ts` (WMS/WMTS GetCapabilities).
+- `src/lib/raster/` – `affine.ts` (pixel→map affine, `fitTransform` 1/2/3+ points), `worldfile.ts` (+ .prj, CRS guess),
+  `kml.ts` (KMZ/KML GroundOverlay), `rasterMap.ts` (pyramid, georef, `viewAffine`), `load.ts` (file set → source).
 - `src/lib/export/` – `exporter.ts` (off-screen OL map → compose canvases → mediabunny/WebCodecs → streamed file),
   `videoSize.ts` (size, bitrate, frame count). Exporter is lazy-loaded.
-- `src/app/` – Svelte UI. `state.svelte.ts` = global `app` state (runes class). Components in `components/`.
+- `src/app/` – Svelte UI. `state.svelte.ts` = global `app` state (runes class: track, layers, raster, georef, frame,
+  export). Components: `MapStage` (OL map, layer sync, georef clicks, resize handle), `Inspector`, `MapPanel`,
+  `AddLayerDialog`, `TimelineBar`, `ExportPanel`.
 
 ## Rules of thumb
 - Anything that affects a video frame must be a pure function of (project, t). No wall-clock smoothing,
   no OL `view.animate` in exported paths (only UI niceties like pause → north-up).
-- Geometry stored in WGS84; project to the view CRS at draw time (cached per track+CRS).
+- Geometry stored in WGS84; project to the view CRS at draw time (cached per track+CRS). Raster georefs carry their own
+  CRS; `viewAffine()` converts. Georef pairs store the true point as lon/lat.
+- The preview and the export build OL layers from the same `app.layers` via `createOlLayer` – never add a layer
+  to only one of them.
 - OL rotation convention: radians, positive = clockwise map rotation; heading-up ⇒ `rotation = -heading`.
   Grid heading = true heading + `gridConvergence(crs, p)`.
 - Sizes in `drawScene` are CSS px × `pixelRatio` so preview and any video resolution look the same.
