@@ -4,8 +4,10 @@
   import { courseProblems } from '../../lib/course/course';
 
   const courseReady = $derived(!!app.passings && courseProblems(app.course).length === 0);
-  const cam = app.courseCamera;
-  const st = app.style.track;
+  // Derived: presets and opened projects replace these objects.
+  const cam = $derived(app.courseCamera);
+  let advanced = $state(false);
+  const st = $derived(app.style.track);
 
   function scaleInput(e: Event, set: (v: number) => void) {
     const v = +(e.currentTarget as HTMLInputElement).value;
@@ -62,30 +64,39 @@
     </div>
     <small class="muted">Legs too long for the zoom-out limit pan along with the runner.</small>
     <label class="field">
-      <span>Margin around the leg · {Math.round(cam.marginFraction * 100)} %</span>
-      <input type="range" min="0" max="0.2" step="0.01" bind:value={cam.marginFraction} disabled={app.locked} />
+      <span>Turn duration · {cam.transitionDuration.toFixed(1)} s</span>
+      <input type="range" min="0.3" max="4" step="0.1" bind:value={cam.transitionDuration} disabled={app.locked} />
     </label>
-    <div class="grid2">
+    {#if advanced}
       <label class="field">
-        <span>Turn duration · {cam.transitionDuration.toFixed(1)} s</span>
-        <input type="range" min="0.3" max="4" step="0.1" bind:value={cam.transitionDuration} disabled={app.locked} />
+        <span>Margin around the leg · {Math.round(cam.marginFraction * 100)} %</span>
+        <input type="range" min="0" max="0.2" step="0.01" bind:value={cam.marginFraction} disabled={app.locked} />
       </label>
       <label class="field">
-        <span>Turn starts · {cam.transitionDelay >= 0 ? '+' : ''}{cam.transitionDelay.toFixed(1)} s</span>
+        <span>
+          Turn starts · {cam.transitionDelay >= 0 ? '+' : ''}{cam.transitionDelay.toFixed(1)} s after the punch
+        </span>
         <input type="range" min="-2" max="3" step="0.1" bind:value={cam.transitionDelay} disabled={app.locked} />
       </label>
-    </div>
-    <div class="seg" role="group" aria-label="Easing">
-      {#each [['sine', 'Smooth'], ['cubic', 'Snappy'], ['linear', 'Linear']] as [v, l] (v)}
-        <button
-          aria-pressed={cam.easing === v}
-          disabled={app.locked}
-          onclick={() => (cam.easing = v as typeof cam.easing)}
-        >
-          {l}
-        </button>
-      {/each}
-    </div>
+      <div class="seg" role="group" aria-label="Easing">
+        {#each [['sine', 'Smooth'], ['cubic', 'Snappy'], ['linear', 'Linear']] as [v, l] (v)}
+          <button
+            aria-pressed={cam.easing === v}
+            disabled={app.locked}
+            onclick={() => (cam.easing = v as typeof cam.easing)}
+          >
+            {l}
+          </button>
+        {/each}
+      </div>
+      <label class="field">
+        <span>After the finish</span>
+        <select bind:value={cam.afterFinish} disabled={app.locked}>
+          <option value="hold">Keep the last leg</option>
+          <option value="overview">Zoom out to the whole course</option>
+        </select>
+      </label>
+    {/if}
     <label class="check">
       <input type="checkbox" bind:checked={cam.approachEnabled} disabled={app.locked} data-testid="approach" />
       Zoom in when approaching the control
@@ -112,13 +123,14 @@
         </label>
       </div>
     {/if}
-    <label class="field">
-      <span>After the finish</span>
-      <select bind:value={cam.afterFinish} disabled={app.locked}>
-        <option value="hold">Keep the last leg</option>
-        <option value="overview">Zoom out to the whole course</option>
-      </select>
-    </label>
+    <button
+      class="btn sm ghost more"
+      onclick={() => (advanced = !advanced)}
+      aria-expanded={advanced}
+      data-testid="camera-advanced"
+    >
+      {advanced ? 'Fewer settings' : 'More settings…'}
+    </button>
   {:else}
     <div class="field">
       <span>Map scale</span>
@@ -210,6 +222,9 @@
 </section>
 
 <style>
+  .more {
+    justify-self: start;
+  }
   .grid2 {
     display: grid;
     grid-template-columns: 1fr 1fr;

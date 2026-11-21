@@ -1,50 +1,30 @@
 <script lang="ts">
-  /** Right-hand inspector with tabs: Map (EPIC-2), Course (EPIC-3), GPX (STORY-2/21), Video (camera, frame, export). */
-  import { app, ASPECTS, type InspectorTab } from '../state.svelte';
+  /** Right-hand inspector: the panel of the selected workflow step (WorkflowRail, STORY-37). */
+  import { app, ASPECTS } from '../state.svelte';
   import AnimationPanel from './AnimationPanel.svelte';
-  import { courseProblems } from '../../lib/course/course';
   import ComponentsPanel from './ComponentsPanel.svelte';
   import CoursePanel from './CoursePanel.svelte';
   import ExportPanel from './ExportPanel.svelte';
   import GpxPanel from './GpxPanel.svelte';
   import MapPanel from './MapPanel.svelte';
-
-  const tabs: { id: InspectorTab; label: string }[] = [
-    { id: 'map', label: 'Map' },
-    { id: 'course', label: 'Course' },
-    { id: 'gpx', label: 'GPX' },
-    { id: 'video', label: 'Video' },
-  ];
-  const status = $derived<Record<InspectorTab, 'ok' | 'todo' | ''>>({
-    map: app.raster ? 'ok' : '',
-    course: app.course ? (courseProblems(app.course).length ? 'todo' : 'ok') : '',
-    gpx: app.track ? 'ok' : 'todo',
-    video: '',
-  });
+  import PresetsPanel from './PresetsPanel.svelte';
+  import RoutePanel from './RoutePanel.svelte';
 </script>
 
 <aside class="inspector" aria-label="Settings">
-  <div class="tabs" role="tablist" aria-label="Inspector sections">
-    {#each tabs as t (t.id)}
-      <button
-        role="tab"
-        aria-selected={app.inspectorTab === t.id}
-        data-testid="tab-{t.id}"
-        onclick={() => app.setInspectorTab(t.id)}
-      >
-        {t.label}
-        {#if status[t.id]}<span class="dot {status[t.id]}"></span>{/if}
-      </button>
-    {/each}
-  </div>
-
   {#if app.inspectorTab === 'map'}
     <MapPanel />
   {:else if app.inspectorTab === 'course'}
     <CoursePanel />
   {:else if app.inspectorTab === 'gpx'}
     <GpxPanel />
+  {:else if app.inspectorTab === 'routes'}
+    <RoutePanel />
+  {:else if app.inspectorTab === 'export'}
+    <ComponentsPanel />
+    <ExportPanel />
   {:else}
+    <PresetsPanel />
     <AnimationPanel />
 
     <section>
@@ -95,9 +75,6 @@
       </label>
       <small class="muted">The video shows only the map, the route and the runner.</small>
     </section>
-
-    <ComponentsPanel />
-    <ExportPanel />
   {/if}
 </aside>
 
@@ -106,45 +83,6 @@
     overflow-y: auto;
     border-left: 1px solid var(--border);
     background: var(--bg-elev);
-  }
-  .tabs {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 2px;
-    padding: 8px 10px 0;
-    background: var(--bg-elev);
-    border-bottom: 1px solid var(--border);
-  }
-  .tabs button {
-    position: relative;
-    border: 0;
-    background: transparent;
-    color: var(--text-muted);
-    padding: 9px 4px 10px;
-    font-weight: 600;
-    font-size: 13px;
-    border-bottom: 2px solid transparent;
-  }
-  .tabs button[aria-selected='true'] {
-    color: var(--text);
-    border-bottom-color: var(--accent);
-  }
-  .dot {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    margin-left: 4px;
-    vertical-align: middle;
-  }
-  .dot.ok {
-    background: var(--ok);
-  }
-  .dot.todo {
-    background: var(--warn);
   }
   section {
     padding: 16px 18px;
@@ -164,14 +102,6 @@
     text-transform: uppercase;
     color: var(--text-muted);
     font-weight: 600;
-  }
-  .tag {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--bg-elev-2);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
   }
   .size {
     display: grid;

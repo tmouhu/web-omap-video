@@ -98,7 +98,7 @@ test('scale input sets the map resolution (1:5 000 = half of 1:10 000)', async (
   await page.getByTestId('load-sample').click();
   await expect.poll(() => page.evaluate(() => !!window.__omv.app.track)).toBe(true);
   const res = () => page.evaluate(() => window.__omv.map().getView().getResolution());
-  await page.getByTestId('tab-video').click();
+  await page.getByTestId('tab-style').click();
   await page.getByTestId('scale').fill('10000');
   await page.getByTestId('scale').press('Enter');
   await page.getByTestId('scale').fill('5000');
@@ -116,7 +116,7 @@ test('exports a frame-exact MP4 with map tiles and downloads it', async ({ page 
   await page.getByTestId('load-sample').click();
   await expect.poll(() => page.evaluate(() => !!window.__omv.app.track)).toBe(true);
   await page.getByRole('button', { name: '30×' }).click();
-  await page.getByTestId('tab-video').click();
+  await page.getByTestId('tab-export').click();
   await page.getByTestId('resolution').selectOption('360');
   await page.evaluate(() => {
     const a = window.__omv.app;

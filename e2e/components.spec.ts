@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.getByTestId('load-sample').click();
   await expect.poll(() => hook(page, (h) => !!h.app.track)).toBe(true);
-  await page.getByTestId('tab-video').click();
+  await page.getByTestId('tab-export').click();
 });
 
 test('component previews render when enabled; unavailable data is explained', async ({ page }) => {

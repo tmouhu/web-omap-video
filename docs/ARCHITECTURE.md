@@ -48,6 +48,13 @@ settings (scale, headingUp, lookAhead) ───┘        │  → { view{cente
   the same timestamp, so all files are frame-identical in time.
 - Range: `resolveRange` (course start→finish / track / custom + padding); `origin` = start passing for elapsed values.
 
+## Projects (EPIC-6)
+- `app.toDoc()` / `app.applyDoc(doc, image)` convert the whole workspace; the raster image is kept as the original Blob
+  (`RasterMap.image`) and the pyramid is rebuilt on load.
+- Autosave: an effect tracks the document's inputs (not the playhead) and saves 1 s after the last change to IndexedDB
+  (`projects` store: record + thumbnail; `blobs` store: raster image, written only when it changed).
+- `.omvproj` = zip { project.json, raster.<ext> }; `migrate()` validates and merges defaults (forward compatible).
+
 ## Coordinate systems
 - proj4 definitions in `lib/geo/crs.ts`, registered with OL in `lib/map/layers.ts` (`registerProjections`).
 - TM35 extent set to the MapAnt tile matrix extent `[-548576, 6291456, 1548576, 8388608]`.

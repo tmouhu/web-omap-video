@@ -108,7 +108,7 @@ test('imports an IOF XML file with two courses and lets the user choose', async 
 test('the course is drawn into exported video frames', async ({ page }) => {
   await drawCourse(page);
   await page.getByTestId('course-edit').click(); // done editing
-  await page.getByTestId('tab-video').click();
+  await page.getByTestId('tab-export').click();
   await page.getByRole('button', { name: '30×' }).click();
   await page.getByTestId('resolution').selectOption('360');
   await hook(page, (h) => {

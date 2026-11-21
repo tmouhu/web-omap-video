@@ -24,6 +24,10 @@
   import type { ViewState } from '../../lib/anim/timeline';
   import type { GpxData } from '../../lib/gpx/gpx';
   import { drawEditorMarks, installTools, syncInteractions } from '../mapTools';
+  import { isProjectFile, openProjectFile } from '../projects.svelte';
+  import { composeOlCanvases } from '../../lib/map/compose';
+  import { formatScale } from '../../lib/format';
+  import { scaleForGroundResolution } from '../../lib/geo/geo';
 
   let stageEl: HTMLDivElement;
   let mapEl: HTMLDivElement;
@@ -444,6 +448,13 @@
       );
     });
     mapReady = true;
+    app.thumbnailProvider = thumbnail;
+    map.on('moveend', () => viewTick++);
+    map.on('pointermove', (e) => {
+      const ll = inverse(app.crs.code, e.coordinate as Pt);
+      cursor = { lat: ll.lat, lon: ll.lon };
+    });
+    map.getViewport()?.addEventListener('pointerleave', () => (cursor = null));
 
     const ro = new ResizeObserver(([e]) => {
       stage = { width: e.contentRect.width, height: e.contentRect.height };
@@ -481,10 +492,50 @@
     dragging = false;
     if (app.exporting) return;
     const files = Array.from(e.dataTransfer?.files ?? []);
-    if (files.length) app.loadFiles(files);
+    openFiles(files);
   }
 
-  const accept = '.gpx,.jpg,.jpeg,.png,.gif,.webp,.bmp,.kmz,.kml,.prj,.jgw,.jpgw,.pgw,.pngw,.tfw,.gfw,.wld';
+  /** Project files open as projects; everything else goes to the GPX / map / course loaders. */
+  function openFiles(files: File[]) {
+    const proj = files.find(isProjectFile);
+    if (proj) void openProjectFile(proj);
+    else if (files.length) void app.loadFiles(files);
+  }
+
+  /** Small JPEG of the current preview (map + overlay) for the project list. */
+  function thumbnail(): string | null {
+    if (!map || !overlayEl || app.frame.width === 0) return null;
+    const w = 320;
+    const h = Math.round((w * app.frame.height) / app.frame.width);
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#ece8df';
+    ctx.fillRect(0, 0, w, h);
+    try {
+      composeOlCanvases(map, ctx, w / app.frame.width);
+      ctx.drawImage(overlayEl, 0, 0, w, h);
+      return c.toDataURL('image/jpeg', 0.72);
+    } catch {
+      return null; // tainted canvas (should not happen with CORS-checked layers)
+    }
+  }
+
+  let cursor = $state<{ lat: number; lon: number } | null>(null);
+  const scaleText = $derived.by(() => {
+    void app.time;
+    void viewTick;
+    const v = map?.getView();
+    const res = v?.getResolution();
+    const c = v?.getCenter();
+    if (!res || !c) return '';
+    return formatScale(scaleForGroundResolution(res / pointScale(app.crs.code, inverse(app.crs.code, c as Pt))));
+  });
+  let viewTick = $state(0);
+
+  const accept =
+    '.omvproj,.xml,.gpx,.jpg,.jpeg,.png,.gif,.webp,.bmp,.kmz,.kml,.prj,.jgw,.jpgw,.pgw,.pngw,.tfw,.gfw,.wld';
 </script>
 
 <div
@@ -537,12 +588,17 @@
                 hidden
                 data-testid="file-input"
                 onchange={(e) => {
-                  const files = Array.from((e.currentTarget as HTMLInputElement).files ?? []);
-                  if (files.length) app.loadFiles(files);
+                  openFiles(Array.from((e.currentTarget as HTMLInputElement).files ?? []));
                 }}
               />
             </label>
             <button class="btn" onclick={() => app.loadSample()} data-testid="load-sample">Load sample GPX</button>
+          </div>
+          <div class="row">
+            <button class="btn ghost" onclick={() => (app.showProjects = true)}>My projects…</button>
+            <button class="btn ghost" onclick={() => app.loadSampleProject()} data-testid="load-sample-project">
+              Sample project
+            </button>
           </div>
           {#if app.error}<p class="error" role="alert">{app.error}</p>{/if}
         </div>
@@ -573,7 +629,8 @@
     {/if}
   </div>
   <div class="frame-caption mono">
-    {app.frame.width} × {app.frame.height} px · {app.crs.name}
+    {app.frame.width} × {app.frame.height} px · {app.crs.name}{scaleText ? ` · ${scaleText}` : ''}
+    {#if cursor}<span data-testid="cursor">· {cursor.lat.toFixed(5)}° N {cursor.lon.toFixed(5)}° E</span>{/if}
     {#if app.exporting}<span class="lock">● Exporting – frame locked</span>{/if}
   </div>
 </div>

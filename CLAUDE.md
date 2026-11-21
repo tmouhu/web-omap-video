@@ -46,9 +46,14 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
   `iofxml.ts` (IOF XML 3.0 CourseData), `routes.ts` (route choices per leg, by point ids). `src/lib/render/overprint.ts` – IOF course symbols (ISOM mm × px/mm).
 - `src/lib/gpx/edits.ts` (non-destructive `GpxEdit` list, spikes), `write.ts` (GPX writer).
 - `src/app/mapTools.ts` – course / GPX / pick-passing tools (OL Pointer interaction + clicks) and preview-only marks.
+- `src/lib/project/` – `project.ts` (versioned ProjectDoc, `migrate`, `.omvproj` zip), `storage.ts` (IndexedDB library),
+  `presets.ts` (style presets).
+- `src/app/projects.svelte.ts` – autosave (`startAutosave`), open/new/rename/delete, project files.
 - `src/app/` – Svelte UI. `state.svelte.ts` = global `app` state (runes class: track, layers, raster, georef, frame,
-  export, course, passings, GPX edits, tools, undo). Inspector tabs: Map (`MapPanel`, `AddLayerDialog`),
-  Course (`CoursePanel`), GPX (`GpxPanel`), Video (camera/frame/overlays + `ExportPanel`). `TimelineBar` has
+  export, course, passings, GPX edits, tools, undo, project, toasts, theme). `WorkflowRail` steps (test ids `tab-*`):
+  map (`MapPanel`), gpx (`GpxPanel`), course (`CoursePanel`), routes (`RoutePanel`), style (`PresetsPanel`,
+  `AnimationPanel`, frame, overlays), export (`ComponentsPanel`, `ExportPanel`). Dialogs: `ProjectsDialog`,
+  `ShortcutsDialog`, `AddLayerDialog`; `Toaster`. `TimelineBar` has
   draggable control markers and the edit range. `App.svelte` holds edit shortcuts (undo/redo, Delete, Enter, Esc).
 
 ## Rules of thumb
@@ -72,4 +77,8 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
 - User-facing animation durations are VIDEO seconds; convert with `speed` (track s = video s × speed).
 - Paused "video view" (`app.followFrame`) applies the frame only on seeks/settings changes, never on data load.
 - Editor-only drawing (selection, track points, ranges) goes in `drawEditorMarks`, never in `drawScene`.
+- New persistent state must go into `ProjectDoc` (`toDoc`/`applyDoc`, `settings()`/`applySettings`) AND the autosave
+  effect's dependency list in `projects.svelte.ts`; add defaults so `migrate()` fills it for old projects.
+- Panels must not cache `app.<settingsObject>` in a plain const (presets/projects replace the objects): use `$derived`.
+- `tests/resources/` holds real user data (GPX, map) – used by `tests/realworld.test.ts`; do not modify.
 - Keep `docs/PROGRESS.md` updated when an issue's acceptance criteria change status.

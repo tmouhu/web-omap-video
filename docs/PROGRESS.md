@@ -12,7 +12,7 @@ Status per backlog issue (see `plan/`). ✅ done · 🟡 partial · ⬜ not star
 | EN-12 CRS (EPIC-2, pulled forward) | 🟡 | TM35FIN/UTM/WebMerc, Finland rule, convergence, point scale. **Missing:** GK zones/KKJ import CRSs, custom proj4 UI, magnetic north |
 | EN-2 Renderer (OpenLayers) | 🟡 | OL map + shared `drawScene` overlay; perf gate partly measured (export 1080p ≈ 4–5 ms/frame ✅). **Missing:** formal ADR, preview fps measurement with 20k-pt track, track simplification, snapshot tests |
 | EN-3 Tile sources | 🟡 | MapAnt TM35 + 3857, OSM interim fallback. **Missing:** persistent Cache API cache, per-host throttling, config, unavailable-service UI |
-| EN-4 Track model | ✅ | Heading smoothed in track time (zero-phase EMA), pace/HR/elevation, channels. Real-world validation pending |
+| EN-4 Track model | ✅ | Heading smoothed in track time (zero-phase EMA), pace/HR/elevation, channels. Checked on one real 2 h GPX (more fixtures welcome) |
 | EN-14 Timeline (EPIC-4, pulled forward) | 🟡 | Free mode `frameStateAt` (follow, heading-up, look-ahead). Course mode not started |
 | EN-10 WebCodecs export | ✅ | mediabunny, H.264/MP4 preferred, frame-exact, streamed to file. 1080p30 ≈ 7.7× real time |
 | EN-6 Prefetch | 🟡 | Replaced by wait-for-`rendercomplete` per frame. **Missing:** throttling/cap, cancel during tile wait |
@@ -80,6 +80,21 @@ Status per backlog issue (see `plan/`). ✅ done · 🟡 partial · ⬜ not star
 | STORY-34 Numeric components | ✅ | Pace (window), heart rate (zones → colour, deterministic heartbeat pulse), elapsed time (countdown or zero before start, optional leg time), elapsed distance (m < 1 km, km ≥ 1 km, optional leg distance); fixed-width digits so values do not jitter. **Missing:** pace sparkline, combined "dashboard" layout |
 | STORY-35 Export range | ✅ | Start → finish (default with a course), whole track, custom (typed times, ⇤/⇥ playhead, I / O keys), lead-in/out; green range bar on the timeline; GPX clock time of the first frame shown and saved |
 | STORY-36 Export package | ✅ | One pass, one frame state per frame drawn to every output; folder picked once (File System Access) with export.json, else OPFS temp files + per-file downloads; same range/fps/frame count for all (E2E checks durations). **Missing:** ZIP download, "re-export changed only" |
+
+## EPIC-6 – UI and project workflow (in progress)
+
+| Issue | Status | Notes |
+| --- | --- | --- |
+| EN-15 Project model | ✅ | Versioned `ProjectDoc` (v1) with `migrate()` (defaults merged in for new settings), packed GPX + edit list, raster georef (image as blob), layers, course, routes, overrides, all settings; `.omvproj` = zip(project.json + raster image); snapshot undo/redo (EN-15 lite, not command based) |
+| EN-16 UI framework | 🟡 | Svelte 5 + own design tokens (dark/light). **Missing:** headless component library, Storybook |
+| EN-19 UX | 🟡 | `docs/UX.md`: personas, journey → rail, principles, test plan. **Missing:** the usability test itself |
+| STORY-37 App shell | ✅ | Workflow rail (6 steps with status), top bar (project name, save state, undo/redo, save file, theme, shortcuts), start screen, empty-state actions, toasts, `?` shortcut sheet, status line (scale, cursor coordinates), dark/light/system theme. **Missing:** first-run tour, tablet layout |
+| STORY-38 Save/open projects | ✅ | Debounced autosave to IndexedDB (image stored only when changed), project library with thumbnails, rename, delete (confirm), sample project, `.omvproj` save/open (also by drop), "New from this map", storage usage + persist request |
+| STORY-39 Settings & presets | ✅ | Built-ins (Classic forest, Sprint, Coach analysis), own presets (localStorage) with export/import, reset to defaults, "More settings…" for advanced camera options |
+| STORY-40 Localisation | ⬜ | Not started (Could) |
+
+Real-world check (tests/resources): the haukkaroga GPX (2 h, HR/cadence/elevation) and the h1 map (JPG + world file,
+TM35FIN guessed correctly, aligns with MapAnt) – `tests/realworld.test.ts`.
 
 ## Known issues
 - The bundled sample GPX has SYNTHETIC elevation and heart rate (for demos/tests).

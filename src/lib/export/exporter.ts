@@ -22,6 +22,7 @@ import {
 } from 'mediabunny';
 import type { Timeline } from '../anim/timeline';
 import { createOlLayer, type LayerDesc } from '../map/layerModel';
+import { composeOlCanvases } from '../map/compose';
 import { registerProjections } from '../map/layers';
 import type { RasterMap } from '../raster/rasterMap';
 import { drawScene } from '../render/scene';
@@ -130,25 +131,6 @@ export async function chooseCodec(width: number, height: number, bitrate?: numbe
   }
   const c = await getFirstEncodableVideoCodec(['vp9', 'av1', 'vp8'], { width, height, quality });
   return c ? { codec: c, extension: 'webm', mimeType: 'video/webm' } : null;
-}
-
-/** Draws all OpenLayers layer canvases of `map` into ctx at `pixelRatio` (OL "export map" pattern). */
-export function composeOlCanvases(map: OlMap, ctx: CanvasRenderingContext2D, pixelRatio: number): void {
-  const canvases = map.getViewport()?.querySelectorAll<HTMLCanvasElement>('.ol-layers canvas') ?? [];
-  for (const canvas of Array.from(canvases)) {
-    if (canvas.width === 0) continue;
-    const parent = canvas.parentElement as HTMLElement | null;
-    const opacity = parent?.style.opacity || canvas.style.opacity;
-    ctx.globalAlpha = opacity === '' || opacity === undefined ? 1 : Number(opacity);
-    const m = canvas.style.transform.match(/^matrix\(([^(]*)\)$/)?.[1];
-    const matrix = m
-      ? m.split(',').map(Number)
-      : [parseFloat(canvas.style.width) / canvas.width, 0, 0, parseFloat(canvas.style.height) / canvas.height, 0, 0];
-    ctx.setTransform(...(matrix.map((v) => v * pixelRatio) as [number, number, number, number, number, number]));
-    ctx.drawImage(canvas, 0, 0);
-  }
-  ctx.globalAlpha = 1;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 /** Renders the map now and resolves once no tiles are loading (or after the timeout). */

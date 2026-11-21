@@ -10,6 +10,16 @@ import {
 import { legIndexOf, newRouteId, nextLabelAndColor, routesForLeg, type RouteChoice } from '../lib/course/routes';
 import type { ProjectScene } from '../lib/render/frameScene';
 import { defaultComponents, type ComponentConfig } from '../lib/components/components';
+import {
+  defaultSettings,
+  mergeDefaults,
+  newProjectId,
+  packGpx,
+  PROJECT_VERSION,
+  unpackGpx,
+  type ProjectDoc,
+  type ProjectSettings,
+} from '../lib/project/project';
 import { DEFAULT_EXPORT_RANGE, resolveRange, type ExportRangeSettings, type ResolvedRange } from '../lib/export/range';
 import { forward, isKnownCrs, selectViewCrs, utmCrs, type CrsInfo } from '../lib/geo/crs';
 import type { LatLon } from '../lib/geo/geo';
@@ -86,7 +96,7 @@ export interface GeorefPair {
   target: LatLon;
 }
 
-export type InspectorTab = 'map' | 'course' | 'gpx' | 'video';
+export type InspectorTab = 'map' | 'gpx' | 'course' | 'routes' | 'style' | 'export';
 
 /** Map editing tool that owns map clicks/drags (one at a time). */
 export type Tool = 'none' | 'course' | 'gpx' | 'gpx-redraw' | 'pick-passing' | 'route';
@@ -105,7 +115,38 @@ export interface PendingRaster {
   levels: ImageBitmap[];
 }
 
+export interface Toast {
+  id: number;
+  text: string;
+  kind: 'info' | 'ok' | 'error';
+}
+
+export type ThemePref = 'system' | 'dark' | 'light';
+
+const loadTheme = (): ThemePref => {
+  try {
+    const v = localStorage.getItem('omv-theme');
+    return v === 'dark' || v === 'light' ? v : 'system';
+  } catch {
+    return 'system';
+  }
+};
+
 class AppState {
+  // --- Project (EN-15 / STORY-38) ---
+  projectId = $state(newProjectId());
+  projectName = $state('Untitled project');
+  projectCreated = Date.now();
+  saveState = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  lastSaved = $state<number | null>(null);
+  /** Opened at start when saved projects exist, or from the top bar. */
+  showProjects = $state(false);
+  showShortcuts = $state(false);
+  toasts = $state<Toast[]>([]);
+  theme = $state<ThemePref>(loadTheme());
+  /** Set by MapStage: renders a small JPEG data URL of the preview for the project list. */
+  thumbnailProvider: (() => string | null) | null = null;
+  private toastSeq = 0;
   /** Original GPX as loaded; never modified (STORY-21). */
   gpx = $state.raw<GpxData | null>(null);
   gpxName = $state('');
@@ -325,6 +366,185 @@ class AppState {
     this.loadGpxText(await res.text(), 'Sample');
   }
 
+  /** Sample project: the sample GPX with a course along it and one route choice (start screen demo). */
+  async loadSampleProject(): Promise<void> {
+    this.newProject();
+    await this.loadSample();
+    const tr = this.track;
+    if (!tr) return;
+    this.projectName = 'Sample – Keskuspuisto';
+    for (const t of [5, 140, 300, 470, 620, 760]) {
+      const p = tr.positionAt(t);
+      this.courseClick({ lat: p.lat + 0.00006, lon: p.lon });
+    }
+    const e = tr.positionAt(tr.duration - 3);
+    this.courseFinish({ lat: e.lat, lon: e.lon });
+    this.routeLeg = 1;
+    const m = tr.positionAt(220);
+    this.routeDraft = [{ lat: m.lat + 0.0012, lon: m.lon + 0.0008 }];
+    this.finishRoute();
+    this.clearHistory();
+  }
+
+  // ---------------- Project (EN-15 / STORY-38) ----------------
+
+  toast(text: string, kind: Toast['kind'] = 'info'): void {
+    const id = ++this.toastSeq;
+    this.toasts = [...this.toasts, { id, text, kind }];
+    setTimeout(() => (this.toasts = this.toasts.filter((t) => t.id !== id)), kind === 'error' ? 8000 : 4000);
+  }
+
+  setTheme(t: ThemePref): void {
+    this.theme = t;
+    try {
+      localStorage.setItem('omv-theme', t);
+    } catch {
+      /* private mode */
+    }
+  }
+
+  get hasContent(): boolean {
+    return !!this.gpx || !!this.raster || !!this.course;
+  }
+
+  clearHistory(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.canUndo = false;
+    this.canRedo = false;
+  }
+
+  /** Current visual/export settings (also the content of presets). */
+  settings(): ProjectSettings {
+    return $state.snapshot({
+      free: this.free,
+      style: this.style,
+      courseStyle: this.courseStyle,
+      courseCamera: this.courseCamera,
+      routeDisplay: this.routeDisplay,
+      courseModeEnabled: this.courseModeEnabled,
+      components: this.components,
+      exportRange: this.exportRange,
+      exportMap: this.exportMap,
+      exportShortSide: this.exportShortSide,
+      exportFps: this.exportFps,
+      bitrateAuto: this.bitrateAuto,
+      bitrateMbps: this.bitrateMbps,
+      speed: this.speed,
+      aspect: this.aspect,
+      frameCustom: this.frameCustom,
+    }) as ProjectSettings;
+  }
+
+  /** Applies (possibly partial) settings, e.g. from a preset; missing parts keep their current values. */
+  applySettings(partial: Partial<ProjectSettings>): void {
+    const s = mergeDefaults(this.settings(), partial);
+    this.free = s.free;
+    this.style = s.style;
+    this.courseStyle = s.courseStyle;
+    this.courseCamera = s.courseCamera;
+    this.routeDisplay = s.routeDisplay;
+    this.courseModeEnabled = s.courseModeEnabled;
+    this.components = s.components;
+    this.exportRange = s.exportRange;
+    this.exportMap = s.exportMap;
+    this.exportShortSide = s.exportShortSide;
+    this.exportFps = s.exportFps;
+    this.bitrateAuto = s.bitrateAuto;
+    this.bitrateMbps = s.bitrateMbps;
+    this.speed = s.speed;
+    this.aspect = s.aspect;
+    this.frameCustom = s.frameCustom;
+  }
+
+  toDoc(): ProjectDoc {
+    const r = this.raster;
+    return {
+      version: PROJECT_VERSION,
+      id: this.projectId,
+      name: this.projectName,
+      created: this.projectCreated,
+      modified: Date.now(),
+      gpx: this.gpx ? packGpx(this.gpx, this.gpxName) : null,
+      gpxEdits: this.gpxEdits,
+      raster: r
+        ? {
+            name: r.name,
+            width: r.width,
+            height: r.height,
+            georef: r.georef,
+            printScale: r.printScale,
+            imageType: r.image.type,
+          }
+        : null,
+      layers: $state.snapshot(this.layers) as LayerDesc[],
+      course: this.course,
+      routes: this.routes,
+      passingOverrides: this.passingOverrides,
+      matchRadius: this.matchRadius,
+      settings: this.settings(),
+    };
+  }
+
+  /** Empties the workspace and starts a new project. */
+  newProject(): void {
+    this.playing = false;
+    this.finishGeoref();
+    this.tool = 'none';
+    releaseRaster(this.raster);
+    this.raster = null;
+    this.pendingRaster = null;
+    this.gpx = null;
+    this.gpxName = '';
+    this.gpxEdits = [];
+    this.dragEdit = null;
+    this.course = null;
+    this.routes = [];
+    this.passingOverrides = {};
+    this.layers = defaultLayers();
+    this.layerHealth = {};
+    this.applySettings(defaultSettings());
+    this.exportResult = null;
+    this.error = this.rasterError = this.courseError = this.exportError = '';
+    this.time = 0;
+    this.selectedPointId = null;
+    this.selectedTrackIndex = null;
+    this.editRange = [null, null];
+    this.projectId = newProjectId();
+    this.projectName = 'Untitled project';
+    this.projectCreated = Date.now();
+    this.saveState = 'idle';
+    this.lastSaved = null;
+    this.clearHistory();
+  }
+
+  /** Replaces the workspace with a saved project. */
+  async applyDoc(doc: ProjectDoc, image: Blob | null): Promise<void> {
+    this.newProject();
+    let raster: RasterMap | null = null;
+    if (doc.raster && image) {
+      const levels = await buildPyramid(image);
+      raster = { ...doc.raster, levels, image };
+    }
+    this.projectId = doc.id;
+    this.projectName = doc.name;
+    this.projectCreated = doc.created;
+    this.gpx = doc.gpx ? unpackGpx(doc.gpx) : null;
+    this.gpxName = doc.gpx?.name ?? '';
+    this.gpxEdits = doc.gpxEdits;
+    this.raster = raster;
+    this.layers = raster ? doc.layers : doc.layers.filter((l) => l.kind !== 'raster');
+    this.course = doc.course;
+    this.routes = doc.routes;
+    this.passingOverrides = doc.passingOverrides;
+    this.matchRadius = doc.matchRadius;
+    this.applySettings(doc.settings);
+    this.lastSaved = doc.modified;
+    this.saveState = 'saved';
+    this.clearHistory();
+    if (doc.raster && !image) this.toast('The map image of this project is missing.', 'error');
+  }
+
   togglePlay(): void {
     if (!this.track || this.exporting) return;
     if (!this.playing && this.time >= this.track.duration) this.time = 0;
@@ -375,7 +595,7 @@ class AppState {
       } else {
         georef = placedGeoref(width, height, this.viewCenter, this.crs.code);
       }
-      this.setRaster({ name: src.name, width, height, levels, georef, printScale: null });
+      this.setRaster({ name: src.name, width, height, levels, georef, printScale: null, image: src.image });
       if (georef.source === 'placed') this.startGeoref();
     } catch (e) {
       this.rasterError = (e as Error).message;
@@ -399,6 +619,7 @@ class AppState {
       levels: p.levels,
       georef: { crs: code, affine: p.source.georef.affine, source: 'world-file' },
       printScale: null,
+      image: p.source.image,
     });
   }
 
@@ -560,7 +781,8 @@ class AppState {
     this.inspectorTab = tab;
     // Tools belong to their tab.
     if (
-      (tab !== 'course' && (this.tool === 'course' || this.tool === 'pick-passing' || this.tool === 'route')) ||
+      (tab !== 'course' && (this.tool === 'course' || this.tool === 'pick-passing')) ||
+      (tab !== 'routes' && this.tool === 'route') ||
       (tab !== 'gpx' && this.tool.startsWith('gpx'))
     ) {
       this.setTool('none');

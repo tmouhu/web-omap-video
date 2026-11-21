@@ -25,6 +25,8 @@ export interface RasterMap {
   georef: RasterGeoref;
   /** Print scale denominator of the map (e.g. 10000), if known. */
   printScale: number | null;
+  /** Original image file (kept so the project can be saved and reopened). */
+  image: Blob;
 }
 
 /** Decodes an image and builds a downsampled pyramid. */

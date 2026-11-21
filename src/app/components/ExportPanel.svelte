@@ -173,6 +173,12 @@
         folder: opened.folder?.name ?? null,
         firstFrameClock: clock0,
       };
+      app.toast(
+        opened.folder
+          ? `Exported ${files.length} video${files.length > 1 ? 's' : ''} to “${opened.folder.name}”`
+          : `Export finished: ${files.length} video${files.length > 1 ? 's' : ''}`,
+        'ok',
+      );
     } catch (e) {
       if ((e as DOMException).name !== 'AbortError') app.exportError = (e as Error).message;
     } finally {

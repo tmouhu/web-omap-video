@@ -1,6 +1,6 @@
 # EPIC-6: Modern, usable UI and project workflow
 
-**Type:** Epic · **Status:** New → in refinement · **Labels:** `ux`, `ui`, `project`
+**Type:** Epic · **Status:** In progress (Nov 2026) · **Labels:** `ux`, `ui`, `project`
 
 ## Summary
 Turn the POC's developer panel into a **visually attractive, modern and well usable** application: a guided workflow from map to

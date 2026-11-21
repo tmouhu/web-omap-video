@@ -3,12 +3,63 @@
   import MapStage from './components/MapStage.svelte';
   import Inspector from './components/Inspector.svelte';
   import TimelineBar from './components/TimelineBar.svelte';
+  import WorkflowRail from './components/WorkflowRail.svelte';
+  import ProjectsDialog from './components/ProjectsDialog.svelte';
+  import ShortcutsDialog from './components/ShortcutsDialog.svelte';
+  import Toaster from './components/Toaster.svelte';
+  import { onMount } from 'svelte';
+  import { listAll, saveProjectFile, startAutosave } from './projects.svelte';
+
+  onMount(() => {
+    const stop = startAutosave();
+    // Start screen: offer the saved projects when there are any (STORY-37/38).
+    listAll()
+      .then((l) => {
+        if (l.length && !app.hasContent) app.showProjects = true;
+      })
+      .catch(() => {});
+    return stop;
+  });
+
+  // Theme: explicit choice or the system preference.
+  $effect(() => {
+    const pref = app.theme;
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    const apply = () => {
+      document.documentElement.dataset.theme = pref === 'system' ? (mq.matches ? 'light' : 'dark') : pref;
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  });
+
+  const saveLabel = $derived(
+    app.saveState === 'saving'
+      ? 'Saving…'
+      : app.saveState === 'error'
+        ? 'Not saved'
+        : app.saveState === 'saved' && app.lastSaved
+          ? `Saved ${new Date(app.lastSaved).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+          : app.hasContent
+            ? 'Not saved yet'
+            : '',
+  );
+  const nextTheme = { system: 'dark', dark: 'light', light: 'system' } as const;
 
   /** Editing shortcuts: undo/redo, Delete, Enter, Escape (playback keys live in TimelineBar). */
   function onKey(e: KeyboardEvent) {
     const el = e.target as HTMLElement;
     if (el.closest('input:not([type=range]):not([type=checkbox]), select, textarea')) return;
     const mod = e.metaKey || e.ctrlKey;
+    if (e.key === '?') {
+      app.showShortcuts = !app.showShortcuts;
+      return;
+    }
+    if (mod && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      void saveProjectFile();
+      return;
+    }
     if (mod && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       if (e.shiftKey) app.redo();
@@ -53,15 +104,77 @@
       </svg>
       <span>OMap Video</span>
     </div>
-    <div class="title">{app.track?.name ?? 'No track loaded'}</div>
-    <div class="right muted">Local only · nothing is uploaded</div>
+    <div class="project">
+      <button class="btn sm ghost" onclick={() => (app.showProjects = true)} data-testid="open-projects">
+        ☰ Projects
+      </button>
+      <input
+        class="pname"
+        type="text"
+        aria-label="Project name"
+        data-testid="project-name"
+        value={app.projectName}
+        onchange={(e) => (app.projectName = (e.currentTarget as HTMLInputElement).value.trim() || 'Untitled project')}
+      />
+      <span class="save {app.saveState}" data-testid="save-state">{saveLabel}</span>
+    </div>
+    <div class="right">
+      <button
+        class="btn ghost icon"
+        title="Undo (⌘/Ctrl Z)"
+        aria-label="Undo"
+        disabled={!app.canUndo}
+        onclick={() => app.undo()}
+      >
+        ↶
+      </button>
+      <button
+        class="btn ghost icon"
+        title="Redo (⇧⌘/Ctrl Z)"
+        aria-label="Redo"
+        disabled={!app.canRedo}
+        onclick={() => app.redo()}
+      >
+        ↷
+      </button>
+      <button
+        class="btn sm"
+        disabled={!app.hasContent}
+        onclick={() => saveProjectFile()}
+        title="Save a project file (.omvproj) for backup or another computer (⌘/Ctrl S)"
+        data-testid="save-project-file"
+      >
+        Save file
+      </button>
+      <button
+        class="btn ghost icon"
+        title="Theme: {app.theme}"
+        aria-label="Switch theme (now {app.theme})"
+        data-testid="theme"
+        onclick={() => app.setTheme(nextTheme[app.theme])}
+      >
+        {app.theme === 'light' ? '☀' : app.theme === 'dark' ? '☾' : '◐'}
+      </button>
+      <button
+        class="btn ghost icon"
+        title="Keyboard shortcuts (?)"
+        aria-label="Keyboard shortcuts"
+        onclick={() => (app.showShortcuts = true)}
+      >
+        ?
+      </button>
+    </div>
   </header>
   <main class="main">
+    <WorkflowRail />
     <MapStage />
     <Inspector />
   </main>
   <TimelineBar />
 </div>
+<ProjectsDialog />
+<ShortcutsDialog />
+<Toaster />
 
 <style>
   .shell {
@@ -72,7 +185,8 @@
   }
   .top {
     display: grid;
-    grid-template-columns: 240px 1fr 240px;
+    grid-template-columns: 200px 1fr auto;
+    gap: 12px;
     align-items: center;
     padding: 0 18px;
     border-bottom: 1px solid var(--border);
@@ -85,21 +199,43 @@
     font-weight: 700;
     letter-spacing: 0.01em;
   }
-  .title {
-    text-align: center;
+  .project {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .pname {
+    max-width: 320px;
+    height: 30px;
     font-weight: 600;
-    color: var(--text-muted);
+    background: transparent;
+    border-color: transparent;
+  }
+  .pname:hover,
+  .pname:focus {
+    background: var(--bg-input);
+    border-color: var(--border);
+  }
+  .save {
+    font-size: 12px;
+    color: var(--text-faint);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+  .save.error {
+    color: var(--danger);
+  }
+  .save.saved {
+    color: var(--ok);
   }
   .right {
-    text-align: right;
-    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
   .main {
     display: grid;
-    grid-template-columns: 1fr 340px;
+    grid-template-columns: 76px 1fr 340px;
     min-height: 0;
   }
 </style>

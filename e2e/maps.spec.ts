@@ -133,7 +133,7 @@ test('frame can be resized freely and aspect presets still work', async ({ page 
   const after = await page.evaluate(() => ({ ...(window as unknown as Win).__omv.app.frame }));
   expect(after.width).toBeLessThan(before.width - 150);
   expect(after.height).toBeLessThan(before.height - 20);
-  await page.getByTestId('tab-video').click();
+  await page.getByTestId('tab-style').click();
   await expect(page.getByRole('button', { name: 'Free' })).toHaveAttribute('aria-pressed', 'true');
 
   await page.getByTestId('frame-width').fill('800');
@@ -147,7 +147,7 @@ test('frame can be resized freely and aspect presets still work', async ({ page 
       height: 400,
     });
 
-  await page.getByRole('button', { name: '1:1' }).click();
+  await page.getByRole('button', { name: '1:1', exact: true }).click();
   const sq = await page.evaluate(() => ({ ...(window as unknown as Win).__omv.app.frame }));
   expect(sq.width).toBe(sq.height);
 });

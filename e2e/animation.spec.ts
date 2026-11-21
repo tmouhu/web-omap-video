@@ -21,7 +21,7 @@ async function setup(page: import('@playwright/test').Page) {
 
 test('course mode: leg target straight above the leg start, preview = video frame', async ({ page }) => {
   await setup(page);
-  await page.getByTestId('tab-video').click();
+  await page.getByTestId('tab-style').click();
   await expect(page.getByTestId('camera-mode')).toHaveText('Leg by leg');
   for (const leg of [0, 1, 2]) {
     await hook(
@@ -51,7 +51,7 @@ test('course mode: leg target straight above the leg start, preview = video fram
 
 test('zoom limits are respected over the whole run', async ({ page }) => {
   await setup(page);
-  await page.getByTestId('tab-video').click();
+  await page.getByTestId('tab-style').click();
   await page.getByTestId('zoom-in-limit').fill('6000');
   await page.getByTestId('zoom-in-limit').press('Enter');
   await page.getByTestId('zoom-out-limit').fill('9000');
@@ -74,7 +74,7 @@ test('zoom limits are respected over the whole run', async ({ page }) => {
 
 test('draws a route choice by clicking and shows its length', async ({ page }) => {
   await setup(page);
-  await page.getByTestId('tab-course').click();
+  await page.getByTestId('tab-routes').click();
   await page.getByTestId('route-leg').selectOption('1');
   await page.getByTestId('route-draw').click();
   const mid = await hook(page, (h) => {
@@ -115,7 +115,7 @@ test('route choices appear in the exported video while they are shown', async ({
     a.exportRange.out = a.passings[1].t + 102;
   });
   await page.getByRole('button', { name: '30×' }).click();
-  await page.getByTestId('tab-video').click();
+  await page.getByTestId('tab-export').click();
   await page.getByTestId('resolution').selectOption('360');
   await page.getByTestId('export').click();
   await expect(page.getByTestId('export-result')).toBeVisible({ timeout: 90_000 });
