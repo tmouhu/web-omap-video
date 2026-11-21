@@ -15,7 +15,9 @@
   import { app, MIN_FRAME } from '../state.svelte';
   import { createOlLayer, type LayerDesc } from '../../lib/map/layerModel';
   import { registerProjections } from '../../lib/map/layers';
-  import { drawScene, makeTransform, projectedTrack } from '../../lib/render/scene';
+  import { drawScene, makeTransform, projectedTrack, type SceneInput } from '../../lib/render/scene';
+  import { sceneForFrame } from '../../lib/render/frameScene';
+  import { formatRouteLength, routeLength, routesForLeg } from '../../lib/course/routes';
   import { forward, inverse, pointScale } from '../../lib/geo/crs';
   import { apply, type Pt } from '../../lib/raster/affine';
   import { rasterExtent, viewAffine, viewToPixel, type RasterMap } from '../../lib/raster/rasterMap';
@@ -200,14 +202,51 @@
       const tl = app.timeline;
       if (!map || !tl || playing) return;
       const view = map.getView();
-      if (wasPlaying) {
+      if (app.followFrame && app.tool === 'none') {
+        // "Video view": the paused preview shows exactly the exported frame at the playhead.
+        wasPlaying = false;
+        applyFrame();
+      } else if (wasPlaying) {
         wasPlaying = false;
         view.animate({ rotation: 0, duration: 250 });
       } else if (t !== lastTime) {
-        view.setCenter(tl.frameStateAt(t, app.frame.height).positionXY);
+        view.setCenter(tl.frameStateAt(t, app.frame).positionXY);
       }
       lastTime = t;
       map.render();
+    });
+  });
+
+  // Paused "video view": re-apply the frame when camera settings or the frame change. (Not when new data is
+  // loaded – that keeps the fitted overview until the user seeks or plays.)
+  $effect(() => {
+    void [
+      $state.snapshot(app.courseCamera),
+      $state.snapshot(app.free),
+      $state.snapshot(app.routeDisplay),
+      app.courseModeEnabled,
+      app.speed,
+      app.frame.width,
+      app.frame.height,
+      app.followFrame,
+    ];
+    untrack(() => {
+      if (mapReady && !app.playing && app.followFrame && app.tool === 'none' && app.timeline) applyFrame();
+    });
+  });
+
+  // Editing tools work north-up (centre and zoom kept).
+  let lastTool = app.tool;
+  $effect(() => {
+    const t = app.tool;
+    untrack(() => {
+      if (mapReady && t !== 'none' && lastTool === 'none') {
+        map!.getView().cancelAnimations();
+        map!.getView().setRotation(0);
+      } else if (mapReady && t === 'none' && lastTool !== 'none' && app.followFrame && app.timeline) {
+        applyFrame();
+      }
+      lastTool = t;
     });
   });
 
@@ -219,7 +258,7 @@
       const tl = app.timeline;
       if (map && tl && !app.playing && s !== lastScale) {
         map.getView().setResolution(tl.resolution);
-        map.getView().setCenter(tl.frameStateAt(app.time, app.frame.height).positionXY);
+        map.getView().setCenter(tl.frameStateAt(app.time, app.frame).positionXY);
       }
       lastScale = s;
     });
@@ -247,6 +286,10 @@
       app.editRange[1],
       app.redrawPath,
       app.showOriginalGpx,
+      app.routes,
+      app.routeLeg,
+      app.routeDraft,
+      app.timeline,
     ];
     map?.render();
   });
@@ -281,24 +324,7 @@
     const vs = currentViewState();
     if (!vs) return;
     const pr = overlayEl.width / app.frame.width;
-    const tl = app.timeline;
-    drawScene(ctx, overlayEl.width, overlayEl.height, pr, vs, {
-      crsCode: app.crs.code,
-      track: app.track,
-      time: app.track ? app.time : null,
-      heading: tl ? tl.frameStateAt(app.time, app.frame.height).gridHeading : null,
-      style: app.style,
-      course:
-        app.course && (app.courseStyle.visible || app.tool === 'course')
-          ? {
-              course: app.course,
-              style: { ...app.courseStyle, visible: true },
-              printScale: app.raster?.printScale ?? null,
-              highlightLeg: null,
-              selectedId: app.tool === 'course' ? app.selectedPointId : null,
-            }
-          : null,
-    });
+    drawScene(ctx, overlayEl.width, overlayEl.height, pr, vs, previewScene());
     drawEditorMarks(ctx, map, pr);
     if (app.georef.active && app.raster) drawGeorefMarks(ctx, vs, pr);
   }
@@ -349,10 +375,47 @@
     ctx.restore();
   }
 
+  /** The exported scene, plus editor conveniences while a tool is active (full track, selection, all routes). */
+  function previewScene(): SceneInput {
+    const tl = app.timeline;
+    const ps = app.projectScene;
+    const editing = app.tool !== 'none';
+    const editCourse =
+      app.course && (app.courseStyle.visible || app.tool === 'course' || app.tool === 'route')
+        ? {
+            course: app.course,
+            style: { ...app.courseStyle, visible: true },
+            printScale: app.raster?.printScale ?? null,
+            highlightLeg: app.tool === 'route' ? app.routeLeg : null,
+            selectedId: app.tool === 'course' ? app.selectedPointId : null,
+          }
+        : null;
+    if (!tl || !ps) {
+      return { crsCode: app.crs.code, track: null, time: null, heading: null, style: app.style, course: editCourse };
+    }
+    const scene = sceneForFrame(tl.frameStateAt(app.time, app.frame), ps);
+    if (!editing) return scene;
+    const legRoutes =
+      app.tool === 'route' && app.course
+        ? routesForLeg(app.routes, app.course, app.routeLeg).map((r) => ({
+            points: r.points,
+            color: r.color,
+            label: r.label,
+            lengthText: formatRouteLength(routeLength(r)),
+          }))
+        : [];
+    return {
+      ...scene,
+      style: { ...scene.style, track: { ...scene.style.track, showFuture: true } },
+      course: editCourse,
+      routes: app.tool === 'route' ? { items: legRoutes, alpha: 1 } : scene.routes,
+    };
+  }
+
   function applyFrame() {
     const tl = app.timeline;
     if (!map || !tl) return;
-    const fs = tl.frameStateAt(app.time, app.frame.height);
+    const fs = tl.frameStateAt(app.time, app.frame);
     const view = map.getView();
     view.cancelAnimations();
     view.setCenter(fs.view.center);

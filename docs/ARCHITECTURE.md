@@ -34,6 +34,14 @@ settings (scale, headingUp, lookAhead) ───┘        │  → { view{cente
   missing point; manual overrides are fixed candidates.
 - Course overprint is part of `drawScene` (between map and track) so it is in exports; editor marks are not.
 
+## Course-mode camera (EPIC-4)
+- `CourseCamera` precomputes a `LegPlan` per leg: rotation = −grid bearing (start→target), content box in leg
+  coordinates (r = right, f = forward) of the GPX segment, both controls and route choices, fitted resolution clamped
+  to the scale limits (`pans` when it does not fit at the zoom-out limit).
+- Schedule: transition into leg i starts at passing_i + delay·speed and lasts duration·speed (track s), shortened to
+  avoid overlaps. `viewAt(t)` = leg view (pan / approach zoom) or a blend (eased rotation, log-resolution, centre).
+- `FrameState.routeAlpha` drives route-choice visibility; `legStartT` drives "current leg" tails.
+
 ## Coordinate systems
 - proj4 definitions in `lib/geo/crs.ts`, registered with OL in `lib/map/layers.ts` (`registerProjections`).
 - TM35 extent set to the MapAnt tile matrix extent `[-548576, 6291456, 1548576, 8388608]`.

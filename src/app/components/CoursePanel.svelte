@@ -5,6 +5,7 @@
   import { writeIofCourseData } from '../../lib/course/iofxml';
   import { formatDistance, formatDuration } from '../../lib/format';
   import type { PassingStatus } from '../../lib/course/match';
+  import RoutePanel from './RoutePanel.svelte';
 
   const c = $derived(app.course);
   const problems = $derived(courseProblems(c));
@@ -170,6 +171,8 @@
     </small>
   {/if}
 </section>
+
+<RoutePanel />
 
 <section class="section">
   <div class="sec-head">

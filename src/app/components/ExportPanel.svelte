@@ -92,18 +92,9 @@
         startT,
         endT: app.track.duration,
         bitrateMbps: mbps,
-        sceneStyle: $state.snapshot(app.style),
+        scene: app.projectScene!,
         layers: $state.snapshot(app.layers) as LayerDesc[],
         raster: app.raster,
-        course:
-          app.course && app.courseStyle.visible
-            ? {
-                course: app.course,
-                style: $state.snapshot(app.courseStyle),
-                printScale: app.raster?.printScale ?? null,
-                highlightLeg: null,
-              }
-            : null,
         signal: abort.signal,
         onProgress: (done, total) => {
           app.exportProgress = { done, total, startedAt: t0 };

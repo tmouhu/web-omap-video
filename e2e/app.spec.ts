@@ -11,7 +11,10 @@ type Hook = {
     free: { scale: number };
     frame: { width: number; height: number };
     timeline: {
-      frameStateAt(t: number, h: number): { view: { center: number[]; rotation: number; resolution: number } };
+      frameStateAt(
+        t: number,
+        f: { width: number; height: number },
+      ): { view: { center: number[]; rotation: number; resolution: number } };
     };
     exportShortSide: number;
     exportFromStart: boolean;
@@ -70,7 +73,7 @@ test('playback follows the timeline exactly, heading-up; pause returns north-up'
   const s = await page.evaluate(() => {
     const { app, map } = window.__omv;
     const v = map().getView();
-    const fs = app.timeline.frameStateAt(app.time, app.frame.height);
+    const fs = app.timeline.frameStateAt(app.time, app.frame);
     return { time: app.time, playing: app.playing, center: v.getCenter(), rot: v.getRotation(), exp: fs.view };
   });
   expect(s.playing).toBe(true);
@@ -80,6 +83,7 @@ test('playback follows the timeline exactly, heading-up; pause returns north-up'
   expect(s.rot).toBeCloseTo(s.exp.rotation, 6);
   expect(Math.abs(s.rot)).toBeGreaterThan(0.01);
 
+  await page.getByTestId('video-view').click(); // off: paused preview returns to free north-up navigation
   await page.keyboard.press('Space');
   await page.waitForTimeout(600);
   const p = await page.evaluate(() => ({

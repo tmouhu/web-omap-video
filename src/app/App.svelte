@@ -27,10 +27,13 @@
     } else if (e.key === 'Enter') {
       if (app.tool === 'course') app.courseFinish();
       else if (app.tool === 'gpx-redraw') app.commitRedraw();
+      else if (app.tool === 'route') app.finishRoute();
     } else if (e.key === 'Escape') {
       if (app.tool === 'gpx-redraw') {
         app.redrawPath = [];
         app.tool = 'gpx';
+      } else if (app.tool === 'route' && app.routeDraft.length) {
+        app.routeDraft = [];
       } else if (app.tool !== 'none') app.setTool('none');
       else if (app.georef.active) app.cancelGeoref();
     }

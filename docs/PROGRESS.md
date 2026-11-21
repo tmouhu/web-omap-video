@@ -56,6 +56,21 @@ Status per backlog issue (see `plan/`). ✅ done · 🟡 partial · ⬜ not star
 | STORY-22 Auto-match | ✅ | Candidates = closest point of each visit inside the radius; DP picks increasing times (butterfly, passed-twice, crossing legs); not-found → closest approach between neighbours; start/finish fall back to track ends; radius slider; < 500 ms for 2 h / 40 controls (unit test) |
 | STORY-23 Manual passings | 🟡 | ±1 s, "now", pick on track (⌖), drag timeline markers, reset per control; stored as absolute GPX-clock ms so trimming does not move them; order validation. **Missing:** typed time entry, ±0.1 s, official split import |
 
+## EPIC-4 – Course-aware animation (in progress)
+
+| Issue | Status | Notes |
+| --- | --- | --- |
+| EN-14 Timeline/camera | ✅ | `CourseCamera` (pure function of t, cached per frame size) inside `Timeline`; `sceneForFrame` shared by preview and export; durations in video seconds × speed |
+| STORY-24 Leg view | ✅ | Rotation = grid bearing start→target; fit of the leg's GPX segment, both controls and its route choices with px + % margins; deterministic (unit + E2E: target straight above start) |
+| STORY-25 Transitions | ✅ | Delay (may be negative) + duration, sine/cubic/linear easing (sine default: cubic turned 90° at ~180°/s), short-way rotation, log-zoom with a small zoom-out bump for far-apart views, time keeps running, overlapping transitions shortened; continuity test at 60 fps |
+| STORY-26 Scale limits & panning | ✅ | Zoom-in/out limits in 1:N; short legs stop at the zoom-in limit; long legs pan with the runner (±8 s smoothed) inside a 60 % box, clamped to the leg box. Transitions may briefly zoom out ≤ 1.6× the zoom-out limit (bump) – review with users |
+| STORY-27 Approach zoom | ✅ | Track-seconds trigger, target scale (clamped by the zoom-in limit), video-seconds zoom, centre between control and runner; skipped for very short legs. **Missing:** per-control off switch |
+| STORY-28 Arrow | 🟡 | Navigation arrow along the smoothed heading, size + colour settings. **Missing:** dot after standing still, accuracy circle |
+| STORY-29 Tail | ✅ | Seconds / current leg / whole route; single colour or pace gradient vs median pace (green→yellow→red); fade; dark edge + white halo; travelled (faint) and future (off by default) lines. **Missing:** HR-zone colours, legend overlay |
+| STORY-30 Draw routes | ✅ | Per-leg route tool: click points, double-click/Enter, snap ends to controls, drag vertices, label + colour (colour-blind-safe palette), geodesic length (5 m / 0.01 km), runner's leg distance, orphan cleanup, undo |
+| STORY-31 Route display | ✅ | Appear with/after the turn, fade-in, visible time, fade-out or whole leg; upright labels "A · 640 m" with simple collision avoidance; included in the leg fit; exported (E2E checks route colour in video). **Missing:** per-leg display override, "shortest route" marker |
+| Preview | ✅ | "🎥 Video view" (default on): paused preview shows the exact video frame; data loads keep the fitted overview; editing tools switch to north-up |
+
 ## Known issues
 - MapAnt's own WMTS capabilities document points to the old `wmts.mapant.fi` host, whose redirect has no CORS header:
   a layer added from those capabilities shows "tiles not loading". The built-in MapAnt layer uses the correct URLs.

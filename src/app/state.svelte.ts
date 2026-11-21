@@ -1,5 +1,14 @@
 /** Global app state (Svelte 5 runes). Heavy objects use $state.raw (not deeply proxied). */
-import { DEFAULT_FREE_MODE, Timeline, type FreeModeSettings } from '../lib/anim/timeline';
+import { DEFAULT_COURSE_CAMERA, type CourseCameraSettings } from '../lib/anim/courseCamera';
+import {
+  DEFAULT_FREE_MODE,
+  DEFAULT_ROUTE_DISPLAY,
+  Timeline,
+  type FreeModeSettings,
+  type RouteDisplaySettings,
+} from '../lib/anim/timeline';
+import { legIndexOf, newRouteId, nextLabelAndColor, routesForLeg, type RouteChoice } from '../lib/course/routes';
+import type { ProjectScene } from '../lib/render/frameScene';
 import { forward, isKnownCrs, selectViewCrs, utmCrs, type CrsInfo } from '../lib/geo/crs';
 import type { LatLon } from '../lib/geo/geo';
 import {
@@ -66,13 +75,14 @@ export interface GeorefPair {
 export type InspectorTab = 'map' | 'course' | 'gpx' | 'video';
 
 /** Map editing tool that owns map clicks/drags (one at a time). */
-export type Tool = 'none' | 'course' | 'gpx' | 'gpx-redraw' | 'pick-passing';
+export type Tool = 'none' | 'course' | 'gpx' | 'gpx-redraw' | 'pick-passing' | 'route';
 
 /** Undoable project state (EN-15 lite: snapshots, until the full project model exists). */
 interface Snapshot {
   course: Course | null;
   gpxEdits: GpxEdit[];
   overrides: Record<string, number>;
+  routes: RouteChoice[];
 }
 
 /** A world-file raster whose CRS could not be determined; waits for the user's choice. */
@@ -118,6 +128,23 @@ class AppState {
     for (const [id, abs] of Object.entries(this.passingOverrides)) overrides[id] = (abs - base) / 1000;
     return matchCourse(t, c, { radius: this.matchRadius, overrides });
   });
+
+  // --- Course-mode animation (EPIC-4) ---
+  /** Use the leg-by-leg camera when a valid course and passings exist. */
+  courseModeEnabled = $state(true);
+  courseCamera = $state<CourseCameraSettings>({ ...DEFAULT_COURSE_CAMERA });
+  routeDisplay = $state<RouteDisplaySettings>({ ...DEFAULT_ROUTE_DISPLAY });
+  /** Route choices of all legs (STORY-30). */
+  routes = $state.raw<RouteChoice[]>([]);
+  /** Leg selected for drawing route choices (index of its first point). */
+  routeLeg = $state(0);
+  /** Route being drawn (tool 'route'). */
+  routeDraft = $state.raw<LatLon[]>([]);
+  /** Snap the first/last point of a drawn route to the leg's controls. */
+  routeSnap = $state(true);
+  /** Paused preview shows the exact video frame at the playhead (else free north-up navigation). */
+  followFrame = $state(true);
+  courseMode = $derived(this.courseModeEnabled && !!this.passings && isValidCourse(this.course));
 
   // --- Tools & selection ---
   inspectorTab = $state<InspectorTab>('map');
@@ -192,7 +219,39 @@ class AppState {
   exportResult = $state.raw<ExportResultView | null>(null);
   exportError = $state('');
 
-  timeline = $derived(this.track ? new Timeline(this.track, this.crs.code, $state.snapshot(this.free)) : null);
+  timeline: Timeline | null = $derived.by(() => {
+    const track = this.track;
+    if (!track) return null;
+    const course = this.course;
+    const passings = this.passings;
+    const routes = this.routes;
+    const cm =
+      this.courseMode && course && passings
+        ? {
+            course,
+            passings,
+            camera: $state.snapshot(this.courseCamera),
+            routes: $state.snapshot(this.routeDisplay),
+            speed: this.speed,
+            legExtras: (li: number) => routesForLeg(routes, course, li).flatMap((r) => r.points),
+          }
+        : null;
+    return new Timeline(track, this.crs.code, $state.snapshot(this.free), cm);
+  });
+  /** Everything drawn over the map, shared by preview and export (see lib/render/frameScene.ts). */
+  projectScene: ProjectScene | null = $derived(
+    this.track
+      ? {
+          crsCode: this.crs.code,
+          track: this.track,
+          style: $state.snapshot(this.style),
+          course: this.course,
+          courseStyle: $state.snapshot(this.courseStyle),
+          printScale: this.raster?.printScale ?? null,
+          routes: this.routes,
+        }
+      : null,
+  );
   /** True while settings that affect the output must not change. */
   locked = $derived(this.exporting);
 
@@ -408,13 +467,14 @@ class AppState {
   // ---------------- Undo / redo ----------------
 
   private snapshot(): Snapshot {
-    return { course: this.course, gpxEdits: this.gpxEdits, overrides: this.passingOverrides };
+    return { course: this.course, gpxEdits: this.gpxEdits, overrides: this.passingOverrides, routes: this.routes };
   }
 
   private restore(s: Snapshot): void {
     this.course = s.course;
     this.gpxEdits = s.gpxEdits;
     this.passingOverrides = s.overrides;
+    this.routes = s.routes;
     this.selectedTrackIndex = null;
     if (this.selectedPointId && !s.course?.points.some((p) => p.id === this.selectedPointId))
       this.selectedPointId = null;
@@ -451,7 +511,7 @@ class AppState {
     this.inspectorTab = tab;
     // Tools belong to their tab.
     if (
-      (tab !== 'course' && (this.tool === 'course' || this.tool === 'pick-passing')) ||
+      (tab !== 'course' && (this.tool === 'course' || this.tool === 'pick-passing' || this.tool === 'route')) ||
       (tab !== 'gpx' && this.tool.startsWith('gpx'))
     ) {
       this.setTool('none');
@@ -461,6 +521,7 @@ class AppState {
   setTool(t: Tool): void {
     if (t !== 'none' && this.georef.active) this.finishGeoref();
     if (this.tool === 'gpx-redraw' && t !== 'gpx-redraw') this.redrawPath = [];
+    if (this.tool === 'route' && t !== 'route') this.routeDraft = [];
     this.tool = this.tool === t ? 'none' : t;
     if (this.tool !== 'pick-passing') this.pickPassingId = null;
   }
@@ -540,6 +601,57 @@ class AppState {
     this.setCourse(c);
     this.passingOverrides = {};
     this.importedCourses = [];
+  }
+
+  // ---------------- Route choices (STORY-30) ----------------
+
+  routeClick(at: LatLon): void {
+    this.routeDraft = [...this.routeDraft, at];
+  }
+
+  /** Finishes the drawn route for the selected leg (snapping its ends to the controls when enabled). */
+  finishRoute(): void {
+    const c = this.course;
+    const draft = this.routeDraft;
+    this.routeDraft = [];
+    if (!c || draft.length < 1) return;
+    const a = c.points[this.routeLeg];
+    const b = c.points[this.routeLeg + 1];
+    if (!a || !b) return;
+    const pts = this.routeSnap ? [{ lat: a.lat, lon: a.lon }, ...draft, { lat: b.lat, lon: b.lon }] : draft;
+    if (pts.length < 2) return;
+    const { label, color } = nextLabelAndColor(routesForLeg(this.routes, c, this.routeLeg));
+    this.pushHistory();
+    this.routes = [...this.routes, { id: newRouteId(), fromId: a.id, toId: b.id, label, color, points: pts }];
+  }
+
+  /** Live vertex move while dragging (call pushHistory() once at drag start). */
+  moveRouteVertex(id: string, k: number, at: LatLon): void {
+    this.routes = this.routes.map((r) =>
+      r.id === id ? { ...r, points: r.points.map((p, i) => (i === k ? at : p)) } : r,
+    );
+  }
+
+  updateRoute(id: string, patch: Partial<Pick<RouteChoice, 'label' | 'color'>>): void {
+    this.pushHistory();
+    this.routes = this.routes.map((r) => (r.id === id ? { ...r, ...patch } : r));
+  }
+
+  removeRoute(id: string): void {
+    this.pushHistory();
+    this.routes = this.routes.filter((r) => r.id !== id);
+  }
+
+  /** Routes whose leg disappeared after course edits. */
+  orphanRouteCount(): number {
+    const c = this.course;
+    return c ? this.routes.filter((r) => legIndexOf(c, r) < 0).length : this.routes.length;
+  }
+
+  removeOrphanRoutes(): void {
+    const c = this.course;
+    this.pushHistory();
+    this.routes = c ? this.routes.filter((r) => legIndexOf(c, r) >= 0) : [];
   }
 
   // ---------------- Passing times (STORY-22/23) ----------------

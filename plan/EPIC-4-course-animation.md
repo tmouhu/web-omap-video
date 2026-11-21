@@ -1,6 +1,6 @@
 # EPIC-4: Course-aware map animation
 
-**Type:** Epic · **Status:** New → in refinement · **Labels:** `animation`, `camera`, `orienteering`
+**Type:** Epic · **Status:** In progress (Nov 2026) · **Labels:** `animation`, `camera`, `orienteering`
 
 ## Summary
 When a course is set, the animation changes from "follow the runner" to **leg-by-leg storytelling**: for each leg, the map is

@@ -24,7 +24,8 @@ import type { Timeline } from '../anim/timeline';
 import { createOlLayer, type LayerDesc } from '../map/layerModel';
 import { registerProjections } from '../map/layers';
 import type { RasterMap } from '../raster/rasterMap';
-import { drawScene, type SceneInput, type SceneStyle } from '../render/scene';
+import { drawScene } from '../render/scene';
+import { sceneForFrame, type ProjectScene } from '../render/frameScene';
 import { frameCount } from './videoSize';
 
 export interface ExportOptions {
@@ -39,12 +40,11 @@ export interface ExportOptions {
   startT: number;
   endT: number;
   bitrateMbps: number;
-  sceneStyle: SceneStyle;
+  /** Project data drawn on top of the map (track, course, routes, style). */
+  scene: ProjectScene;
   /** Layer stack (bottom first) and the project's raster map, same as the preview. */
   layers: LayerDesc[];
   raster: RasterMap | null;
-  /** Course overprint (same input the preview uses, without editor selection). */
-  course: SceneInput['course'];
   codec: CodecChoice;
   /** Where the encoded video is streamed (see `openExportTarget`). */
   target: ExportTarget;
@@ -213,7 +213,7 @@ export async function exportVideo(o: ExportOptions): Promise<ExportResult> {
     for (let n = 0; n < total; n++) {
       if (o.signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
       const t = Math.min(o.endT, o.startT + (n * o.speed) / o.fps);
-      const fs = o.timeline.frameStateAt(t, o.cssHeight);
+      const fs = o.timeline.frameStateAt(t, { width: o.cssWidth, height: o.cssHeight });
       const view = map.getView();
       view.setCenter(fs.view.center);
       view.setResolution(fs.view.resolution);
@@ -222,14 +222,7 @@ export async function exportVideo(o: ExportOptions): Promise<ExportResult> {
       ctx.fillStyle = '#ece8df';
       ctx.fillRect(0, 0, o.width, o.height);
       composeOlCanvases(map, ctx, pixelRatio);
-      drawScene(ctx, o.width, o.height, pixelRatio, fs.view, {
-        crsCode: o.timeline.crsCode,
-        track: o.timeline.track,
-        time: t,
-        heading: fs.gridHeading,
-        style: o.sceneStyle,
-        course: o.course,
-      });
+      drawScene(ctx, o.width, o.height, pixelRatio, fs.view, sceneForFrame(fs, o.scene));
       await source.add(n / o.fps, 1 / o.fps);
       o.onProgress?.(n + 1, total);
     }

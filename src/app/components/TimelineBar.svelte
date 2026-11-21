@@ -147,6 +147,16 @@
     {app.track?.startTime ? formatClock(app.track.startTime + app.time * 1000) : '--:--:--'}
   </div>
 
+  <button
+    class="btn sm vv"
+    class:on={app.followFrame}
+    aria-pressed={app.followFrame}
+    title="Video view: when paused, show exactly the video frame at the playhead (off: free north-up map)"
+    data-testid="video-view"
+    onclick={() => (app.followFrame = !app.followFrame)}
+  >
+    🎥 Video view
+  </button>
   <div class="seg" role="group" aria-label="Playback speed">
     {#each SPEED_PRESETS as s (s)}
       <button aria-pressed={app.speed === s} disabled={app.exporting} onclick={() => (app.speed = s)}>{s}×</button>
@@ -157,7 +167,7 @@
 <style>
   .bar {
     display: grid;
-    grid-template-columns: auto auto 1fr auto auto;
+    grid-template-columns: auto auto 1fr auto auto auto;
     align-items: center;
     gap: 16px;
     padding: 10px 18px;
@@ -189,6 +199,10 @@
   }
   .clock {
     font-size: 12px;
+  }
+  .vv.on {
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .scrub {
     position: relative;

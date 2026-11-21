@@ -1,6 +1,7 @@
 <script lang="ts">
   /** Right-hand inspector with tabs: Map (EPIC-2), Course (EPIC-3), GPX (STORY-2/21), Video (camera, frame, export). */
-  import { app, ASPECTS, SCALE_PRESETS, type InspectorTab } from '../state.svelte';
+  import { app, ASPECTS, type InspectorTab } from '../state.svelte';
+  import AnimationPanel from './AnimationPanel.svelte';
   import { courseProblems } from '../../lib/course/course';
   import CoursePanel from './CoursePanel.svelte';
   import ExportPanel from './ExportPanel.svelte';
@@ -43,52 +44,7 @@
   {:else if app.inspectorTab === 'gpx'}
     <GpxPanel />
   {:else}
-    <section>
-      <header>
-        <h3>Camera</h3>
-        <span class="tag">Free mode</span>
-      </header>
-      <div class="field">
-        <span>Map scale</span>
-        <div class="scale">
-          <span class="mono muted">1:</span>
-          <input
-            type="number"
-            min="500"
-            max="200000"
-            step="500"
-            value={app.free.scale}
-            disabled={app.locked}
-            data-testid="scale"
-            onchange={(e) => {
-              const v = +(e.currentTarget as HTMLInputElement).value;
-              app.free.scale = Math.min(200000, Math.max(500, Number.isFinite(v) ? v : 10000));
-            }}
-          />
-          <select
-            aria-label="Scale presets"
-            disabled={app.locked}
-            value=""
-            onchange={(e) => {
-              const v = +(e.currentTarget as HTMLSelectElement).value;
-              if (v) app.free.scale = v;
-              (e.currentTarget as HTMLSelectElement).value = '';
-            }}
-          >
-            <option value="">Presets</option>
-            {#each SCALE_PRESETS as s (s)}<option value={s}>1:{s.toLocaleString('en')}</option>{/each}
-          </select>
-        </div>
-        <small class="muted">At 96 px per inch on the preview frame.</small>
-      </div>
-      <label class="check">
-        <input type="checkbox" bind:checked={app.free.headingUp} disabled={app.locked} /> Heading up while playing
-      </label>
-      <div class="field">
-        <span>Look-ahead · {Math.round(app.free.lookAhead * 100)} % below centre</span>
-        <input type="range" min="0" max="0.4" step="0.05" bind:value={app.free.lookAhead} disabled={app.locked} />
-      </div>
-    </section>
+    <AnimationPanel />
 
     <section>
       <header><h3>Frame</h3></header>
@@ -218,12 +174,6 @@
   .size {
     display: grid;
     grid-template-columns: 1fr auto 1fr auto;
-    align-items: center;
-    gap: 6px;
-  }
-  .scale {
-    display: grid;
-    grid-template-columns: auto 1fr 110px;
     align-items: center;
     gap: 6px;
   }

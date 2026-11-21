@@ -10,6 +10,7 @@ import PointerInteraction from 'ol/interaction/Pointer';
 import { forward, inverse } from '../lib/geo/crs';
 import type { LatLon } from '../lib/geo/geo';
 import { closestInWindow } from '../lib/course/match';
+import { routesForLeg } from '../lib/course/routes';
 import { projectedTrack } from '../lib/render/scene';
 import { app } from './state.svelte';
 
@@ -61,6 +62,25 @@ function hitLeg(map: OlMap, px: Px): number {
   return -1;
 }
 
+/** Route vertex [routeId, vertexIndex] of the selected leg under the pixel, or null. */
+function hitRouteVertex(map: OlMap, px: Px): [string, number] | null {
+  const c = app.course;
+  if (!c) return null;
+  let best: [string, number] | null = null;
+  let bestD = HIT_PX;
+  for (const r of routesForLeg(app.routes, c, app.routeLeg)) {
+    r.points.forEach((p, k) => {
+      const q = toPx(map, p);
+      const d = Math.hypot(q[0] - px[0], q[1] - px[1]);
+      if (d < bestD) {
+        bestD = d;
+        best = [r.id, k];
+      }
+    });
+  }
+  return best;
+}
+
 /** Track point index under the pixel (edited track), or -1. */
 function hitTrackPoint(map: OlMap, px: Px): number {
   const tr = app.track;
@@ -82,6 +102,7 @@ function hitTrackPoint(map: OlMap, px: Px): number {
 export function installTools(map: OlMap): () => void {
   let dragCourseId: string | null = null;
   let dragTrackIndex: number | null = null;
+  let dragRoute: [string, number] | null = null;
 
   const drag = new PointerInteraction({
     handleDownEvent: (e) => {
@@ -91,6 +112,13 @@ export function installTools(map: OlMap): () => void {
         if (i < 0) return false;
         dragCourseId = app.course!.points[i].id;
         app.selectedPointId = dragCourseId;
+        app.pushHistory();
+        return true;
+      }
+      if (app.tool === 'route' && app.routeDraft.length === 0) {
+        const v = hitRouteVertex(map, px);
+        if (!v) return false;
+        dragRoute = v;
         app.pushHistory();
         return true;
       }
@@ -106,6 +134,7 @@ export function installTools(map: OlMap): () => void {
     handleDragEvent: (e) => {
       const at = lonLat(map, e);
       if (dragCourseId) app.courseMoveLive(dragCourseId, at);
+      else if (dragRoute) app.moveRouteVertex(dragRoute[0], dragRoute[1], at);
       else if (dragTrackIndex !== null) {
         app.dragEdit = { type: 'move', index: dragTrackIndex, lat: at.lat, lon: at.lon, radius: app.brushRadius };
       }
@@ -119,6 +148,7 @@ export function installTools(map: OlMap): () => void {
       }
       dragCourseId = null;
       dragTrackIndex = null;
+      dragRoute = null;
       return false;
     },
   });
@@ -149,6 +179,9 @@ export function installTools(map: OlMap): () => void {
       case 'gpx-redraw':
         app.redrawPath = [...app.redrawPath, at];
         return;
+      case 'route':
+        app.routeClick(at);
+        return;
       case 'pick-passing': {
         const id = app.pickPassingId;
         const c = app.course;
@@ -176,6 +209,10 @@ export function installTools(map: OlMap): () => void {
     } else if (app.tool === 'gpx-redraw') {
       app.commitRedraw();
       e.preventDefault();
+    } else if (app.tool === 'route') {
+      app.routeClick(lonLat(map, e));
+      app.finishRoute();
+      e.preventDefault();
     }
   };
   map.on('singleclick', onClick);
@@ -191,7 +228,7 @@ export function installTools(map: OlMap): () => void {
 /** Enables interactions for the current mode: none while playing/exporting; no double-click zoom while drawing. */
 export function syncInteractions(map: OlMap): void {
   const active = !app.playing && !app.exporting;
-  const drawing = app.tool === 'course' || app.tool === 'gpx-redraw';
+  const drawing = app.tool === 'course' || app.tool === 'gpx-redraw' || app.tool === 'route';
   map.getInteractions().forEach((i) => i.setActive(active && !(drawing && i instanceof DoubleClickZoom)));
 }
 
@@ -275,6 +312,36 @@ export function drawEditorMarks(ctx: CanvasRenderingContext2D, map: OlMap, pr: n
     ctx.strokeStyle = '#1969ff';
     ctx.lineWidth = 2.5 * pr;
     ctx.stroke();
+  }
+  // Route being drawn, and draggable vertices of the selected leg's routes.
+  if (app.tool === 'route' && app.course) {
+    const leg = app.course.points[app.routeLeg];
+    const draft = app.routeSnap && leg ? [leg, ...app.routeDraft] : app.routeDraft;
+    if (draft.length) {
+      ctx.beginPath();
+      draft.forEach((p, i) => {
+        const q = P(...forward(crs, p));
+        if (i === 0) ctx.moveTo(...q);
+        else ctx.lineTo(...q);
+      });
+      ctx.strokeStyle = '#1b1f24';
+      ctx.lineWidth = 2.5 * pr;
+      ctx.setLineDash([6 * pr, 4 * pr]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    for (const r of routesForLeg(app.routes, app.course, app.routeLeg)) {
+      for (const p of r.points) {
+        const q = P(...forward(crs, p));
+        ctx.beginPath();
+        ctx.arc(q[0], q[1], 4 * pr, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.lineWidth = 2 * pr;
+        ctx.strokeStyle = r.color;
+        ctx.stroke();
+      }
+    }
   }
   // Passing positions on the track (small ticks), when the course panel is in use.
   if (tr && app.passings && app.tool !== 'none') {

@@ -28,8 +28,10 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
 - `src/lib/geo/` – `geo.ts` (geodesy, angles, scale↔resolution), `crs.ts` (proj4 defs, `selectViewCrs`,
   convergence, point scale), `finland.ts` (coarse polygon).
 - `src/lib/gpx/gpx.ts` – parser (time, ele, HR/cad extensions). `src/lib/track/track.ts` – Track model.
-- `src/lib/anim/timeline.ts` – **`Timeline.frameStateAt(t, frameCssHeight)`: pure, deterministic**. Preview and
-  export both use it. Course mode (EPIC-4) goes here.
+- `src/lib/anim/timeline.ts` – **`Timeline.frameStateAt(t, { width, height })`: pure, deterministic** (free mode or
+  course mode). `courseCamera.ts` – leg views, transitions, limits/panning, approach zoom.
+- `src/lib/render/frameScene.ts` – `sceneForFrame(fs, projectScene)`: the ONE place a frame's scene is assembled
+  (preview + export). `scene.ts` draws course, routes, tail, arrow; `overprint.ts` the IOF course.
 - `src/lib/render/scene.ts` – `drawScene()` draws track, arrow, overlays on a 2D canvas for preview AND export.
 - `src/lib/map/` – `layers.ts` (MapAnt/OSM constants, `registerProjections()` – call before creating any OL View),
   `layerModel.ts` (`LayerDesc` → `createOlLayer`, credits, native/reprojected), `rasterLayer.ts` (affine raster via
@@ -39,7 +41,7 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
 - `src/lib/export/` – `exporter.ts` (off-screen OL map → compose canvases → mediabunny/WebCodecs → streamed file),
   `videoSize.ts` (size, bitrate, frame count). Exporter is lazy-loaded.
 - `src/lib/course/` – `course.ts` (model, legs, labels, edit helpers), `match.ts` (GPX↔course DP matching),
-  `iofxml.ts` (IOF XML 3.0 CourseData). `src/lib/render/overprint.ts` – IOF course symbols (ISOM mm × px/mm).
+  `iofxml.ts` (IOF XML 3.0 CourseData), `routes.ts` (route choices per leg, by point ids). `src/lib/render/overprint.ts` – IOF course symbols (ISOM mm × px/mm).
 - `src/lib/gpx/edits.ts` (non-destructive `GpxEdit` list, spikes), `write.ts` (GPX writer).
 - `src/app/mapTools.ts` – course / GPX / pick-passing tools (OL Pointer interaction + clicks) and preview-only marks.
 - `src/app/` – Svelte UI. `state.svelte.ts` = global `app` state (runes class: track, layers, raster, georef, frame,
@@ -64,5 +66,7 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
   Never assign `app.track`. Anything keyed to "a new GPX was loaded" must compare `app.gpx`, not `app.track`.
 - Undoable changes call `app.pushHistory()` first (snapshot of course, GPX edits, passing overrides).
 - Manual passing times are absolute GPX-clock ms (`passingOverrides`); `passings` is derived (matchCourse).
+- User-facing animation durations are VIDEO seconds; convert with `speed` (track s = video s × speed).
+- Paused "video view" (`app.followFrame`) applies the frame only on seeks/settings changes, never on data load.
 - Editor-only drawing (selection, track points, ranges) goes in `drawEditorMarks`, never in `drawScene`.
 - Keep `docs/PROGRESS.md` updated when an issue's acceptance criteria change status.
