@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply } from '../src/lib/raster/affine';
 import { crsFromPrj, formatWorldFile, guessWorldFileCrs, parseWorldFile } from '../src/lib/raster/worldfile';
+import { isWorldFileOnly, readWorldFile } from '../src/lib/raster/load';
 
 const JGW = '0.5\n0\n0\n-0.5\n385000.25\n6675999.75\n';
 
@@ -37,5 +38,28 @@ describe('world files', () => {
     expect(crsFromPrj('PROJCS["x",GEOGCS["y"],AUTHORITY["EPSG","3879"]]')).toBe('EPSG:3879');
     expect(crsFromPrj('GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984"]]')).toBe('EPSG:4326');
     expect(crsFromPrj('LOCAL_CS["nothing"]')).toBeNull();
+  });
+});
+
+describe('world file for a loaded image', () => {
+  const file = (name: string, text: string) => new File([text], name);
+
+  it('recognises a world file (+ .prj) without an image', () => {
+    expect(isWorldFileOnly([file('map.wld', JGW)])).toBe(true);
+    expect(isWorldFileOnly([file('MAP.JGW', JGW), file('map.prj', 'x')])).toBe(true);
+    expect(isWorldFileOnly([file('map.prj', 'x')])).toBe(false);
+    expect(isWorldFileOnly([file('map.wld', JGW), file('map.png', '')])).toBe(false);
+  });
+
+  it('reads the affine and guesses the CRS from the coordinates', async () => {
+    const r = await readWorldFile([file('map.wld', JGW)], 1000, 1000, null);
+    expect(apply(r.affine, [0, 0])).toEqual([385000, 6676000]);
+    expect(r).toMatchObject({ crs: 'EPSG:3067', crsGuessed: true });
+  });
+
+  it('prefers the CRS of a .prj', async () => {
+    const prj = 'PROJCS["ETRS89 / TM35FIN(E,N)",AUTHORITY["EPSG","3067"]]';
+    const r = await readWorldFile([file('map.prj', prj), file('map.wld', JGW)], 1000, 1000, null);
+    expect(r).toMatchObject({ crs: 'EPSG:3067', crsGuessed: false });
   });
 });

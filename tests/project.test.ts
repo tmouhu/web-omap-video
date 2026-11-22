@@ -46,9 +46,31 @@ describe('project document', () => {
     expect(d.settings.speed).toBe(2);
     expect(d.settings.courseCamera.zoomInLimit).toBe(3000);
     expect(d.settings.courseCamera.zoomOutLimit).toBe(defaultSettings().courseCamera.zoomOutLimit);
-    expect(d.settings.components.map((c) => c.kind)).toEqual(['elevation', 'pace', 'heartRate', 'time', 'distance']);
+    expect(d.settings.components.map((c) => c.kind)).toEqual([
+      'elevation',
+      'pace',
+      'heartRate',
+      'time',
+      'distance',
+      'splits',
+    ]);
+    expect(d.results).toBeNull();
     expect(d.layers.length).toBeGreaterThan(0); // empty layer list → defaults
     expect(d.matchRadius).toBe(60);
+  });
+
+  it('keeps imported results and fills missing result settings', () => {
+    const cls = { name: 'A', controls: ['31'], competitors: [] };
+    const d = migrate({ ...doc(), results: { source: 'x.xml', event: 'E', cls, runner: 2, clockOffset: 1.5 } });
+    expect(d.results).toMatchObject({
+      source: 'x.xml',
+      runner: 2,
+      clockOffset: 1.5,
+      reference: 'ok',
+      tzOffsetMin: null,
+    });
+    expect(d.results!.cls).toEqual(cls);
+    expect(migrate({ ...doc(), results: { source: 'x' } }).results).toBeNull();
   });
 
   it('rejects other files and newer versions', () => {

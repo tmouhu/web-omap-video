@@ -135,13 +135,43 @@
     {t('routes.wholeLeg')}
   </label>
   {#if !app.routeDisplay.wholeLeg}
+    <div class="seg" role="group" aria-label={t('routes.timeBase')}>
+      <button
+        aria-pressed={app.routeDisplay.timeBase !== 'real'}
+        onclick={() => (app.routeDisplay.timeBase = 'video')}
+        data-testid="route-time-video"
+      >
+        {t('routes.videoTime')}
+      </button>
+      <button
+        aria-pressed={app.routeDisplay.timeBase === 'real'}
+        onclick={() => (app.routeDisplay.timeBase = 'real')}
+        data-testid="route-time-real"
+      >
+        {t('routes.realTime')}
+      </button>
+    </div>
+    <small class="muted">{t('routes.timeBaseHelp')}</small>
     <label class="field">
       <span>{t('routes.hold', { s: app.routeDisplay.hold.toFixed(1) })}</span>
-      <input type="range" min="1" max="20" step="0.5" bind:value={app.routeDisplay.hold} data-testid="route-hold" />
+      <input
+        type="range"
+        min="1"
+        max={app.routeDisplay.timeBase === 'real' ? 120 : 20}
+        step="0.5"
+        bind:value={app.routeDisplay.hold}
+        data-testid="route-hold"
+      />
     </label>
     <label class="field">
       <span>{t('routes.fade', { s: app.routeDisplay.fadeOut.toFixed(1) })}</span>
-      <input type="range" min="0" max="4" step="0.1" bind:value={app.routeDisplay.fadeOut} />
+      <input
+        type="range"
+        min="0"
+        max={app.routeDisplay.timeBase === 'real' ? 20 : 4}
+        step="0.1"
+        bind:value={app.routeDisplay.fadeOut}
+      />
     </label>
   {/if}
   <small class="muted">{t('routes.note')}</small>

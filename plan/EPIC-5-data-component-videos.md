@@ -24,7 +24,8 @@ elapsed distance. They are frame-exactly synchronised with the map animation and
 - Audio.
 
 ## Child issues
-- Stories: [STORY-32](./stories/STORY-32-data-component-videos.md) – [STORY-36](./stories/STORY-36-export-package.md)
+- Stories: [STORY-32](./stories/STORY-32-data-component-videos.md) – [STORY-36](./stories/STORY-36-export-package.md),
+  [STORY-41](./stories/STORY-41-import-results-split-comparison.md) (results import, split comparison component)
 - Enabler: [EN-10](./enablers/EN-10-spike-offline-rendering.md) (from EPIC-1)
 
 ## Definition of done (epic level)

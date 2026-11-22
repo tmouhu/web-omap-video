@@ -7,8 +7,11 @@ import {
   elevationProfile,
   hrZone,
   isAvailable,
+  splitsVisibility,
   DEFAULT_COMPONENT_OPTIONS,
+  type SplitEvent,
 } from '../src/lib/components/components';
+import type { SplitRow } from '../src/lib/results/splits';
 import { firstFrameClock, resolveRange, DEFAULT_EXPORT_RANGE } from '../src/lib/export/range';
 import { parseDuration } from '../src/lib/format';
 import { Track } from '../src/lib/track/track';
@@ -93,4 +96,51 @@ describe('parseDuration', () => {
     ['2:30.5', 150.5],
   ])('%s → %s', (s, v) => expect(parseDuration(s)).toBe(v));
   it.each(['', 'x', '1:75', '1::2'])('rejects %j', (s) => expect(parseDuration(s)).toBeNull());
+});
+
+describe('splits component visibility', () => {
+  const row = (finish = false): SplitRow => ({
+    code: finish ? '' : '31',
+    finish,
+    elapsed: 60,
+    leg: 60,
+    legDiff: 2,
+    totalDiff: 2,
+    legRank: 2,
+    totalRank: 2,
+  });
+  const events: SplitEvent[] = [
+    { t: 100, number: 1, row: row() },
+    { t: 103, number: 2, row: row() },
+    { t: 200, number: 3, row: row(true) },
+  ];
+  const o = { ...DEFAULT_COMPONENT_OPTIONS, splitFadeIn: 0.5, splitShow: 4, splitFadeOut: 1, splitShowFinish: 8 };
+  const at = (t: number, speed = 1) => splitsVisibility({ ...data(t), splits: events, speed }, o);
+
+  it('hidden before the first passing and after the fade-out', () => {
+    expect(at(99)).toBeNull();
+    expect(at(150)).toBeNull();
+    expect(splitsVisibility({ ...data(100), splits: null }, o)).toBeNull();
+  });
+
+  it('fades in, stays for the display time, fades out (video seconds)', () => {
+    expect(at(200.25)!.alpha).toBeCloseTo(0.5);
+    expect(at(202)!.alpha).toBe(1);
+    expect(at(208.5 + 0.5)!.alpha).toBeCloseTo(0.5); // finish: 0.5 + 8 s, then half of the 1 s fade
+    expect(at(209.6)).toBeNull();
+    // At 2× speed the same video durations span twice the track time.
+    expect(at(200.5, 2)!.alpha).toBeCloseTo(0.5);
+    expect(at(218, 2)!.alpha).toBeCloseTo(0.5);
+  });
+
+  it('a later passing replaces the current one', () => {
+    expect(at(102)!.event.number).toBe(1);
+    expect(at(103.5)!.event.number).toBe(2);
+  });
+
+  it('available only with split data', () => {
+    expect(isAvailable('splits', track)).toBe(false);
+    expect(isAvailable('splits', track, true)).toBe(true);
+    expect(isAvailable('splits', null, true)).toBe(false);
+  });
 });

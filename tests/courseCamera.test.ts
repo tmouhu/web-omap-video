@@ -8,7 +8,8 @@ import {
 import { DEFAULT_ROUTE_DISPLAY, routeAlpha, Timeline, DEFAULT_FREE_MODE } from '../src/lib/anim/timeline';
 import { appendPoint, emptyCourse, finishAtLast, type Course } from '../src/lib/course/course';
 import { matchCourse } from '../src/lib/course/match';
-import { forward } from '../src/lib/geo/crs';
+import { forward, pointScale } from '../src/lib/geo/crs';
+import { groundResolutionForScale } from '../src/lib/geo/geo';
 import { makeTransform } from '../src/lib/render/scene';
 import { Track } from '../src/lib/track/track';
 import { pt } from './helpers';
@@ -33,7 +34,7 @@ function track(...wp: [number, number][]): Track {
 }
 const FRAME = { width: 800, height: 450 };
 
-function setup(wp: [number, number][], settings: Partial<CourseCameraSettings> = {}, speed = 1) {
+function setup(wp: [number, number][], settings: Partial<CourseCameraSettings> = {}, speed = 1, northRotation = 0) {
   const tr = track(...wp);
   const c = course(...wp);
   const passings = matchCourse(tr, c);
@@ -45,6 +46,7 @@ function setup(wp: [number, number][], settings: Partial<CourseCameraSettings> =
     settings: { ...DEFAULT_COURSE_CAMERA, approachEnabled: false, ...settings },
     speed,
     frame: FRAME,
+    northRotation,
   });
   return { tr, c, passings, cam };
 }
@@ -210,5 +212,184 @@ describe('Timeline course mode and route visibility (STORY-31)', () => {
         [400, 500],
       ];
     }
+  });
+});
+
+describe('overview after the finish uses map north', () => {
+  const wp: [number, number][] = [
+    [0, 0],
+    [0, 600],
+    [500, 600],
+    [500, 100],
+  ];
+  it('rotation = map north and the whole course is in the frame', () => {
+    const north = (-15 * Math.PI) / 180;
+    const { cam, c, tr } = setup(wp, { afterFinish: 'overview' }, 1, north);
+    const v = cam.viewAt(tr.duration + 60).view;
+    expect(v.rotation).toBeCloseTo(north, 9);
+    for (const p of c.points) {
+      const [x, y] = screen(v, p);
+      expect(x).toBeGreaterThan(0);
+      expect(x).toBeLessThan(FRAME.width);
+      expect(y).toBeGreaterThan(0);
+      expect(y).toBeLessThan(FRAME.height);
+    }
+    // Without a raster map the overview stays grid-north-up.
+    expect(setup(wp, { afterFinish: 'overview' }).cam.viewAt(tr.duration + 60).view.rotation).toBe(0);
+  });
+});
+
+describe('route display time base and route-aware framing', () => {
+  const r = { ...DEFAULT_ROUTE_DISPLAY, fadeIn: 1, hold: 2, fadeOut: 2 };
+
+  it('real-time (1×) units ignore the playback speed', () => {
+    // 10× video time: hold of 2 video s = 20 track s; real time: 2 track s.
+    expect(routeAlpha(10 + 10 + 15, 10, 1000, r, 10)).toBe(1);
+    expect(routeAlpha(10 + 1 + 2 + 1, 10, 1000, { ...r, timeBase: 'real' }, 10)).toBeCloseTo(0.5, 6);
+    expect(routeAlpha(10 + 6, 10, 1000, { ...r, timeBase: 'real' }, 10)).toBe(0);
+  });
+
+  // Leg 1 east 600 m; a route choice that first runs 500 m back west (the fit is limited by the leg's length).
+  const wp: [number, number][] = [
+    [0, 0],
+    [0, 600],
+    [300, 600],
+  ];
+  function cam(routeDisplay?: typeof r) {
+    const tr = track(...wp);
+    const c = course(...wp);
+    const passings = matchCourse(tr, c);
+    const detour = [at(0, 0), at(-200, -500), at(0, 600)];
+    return {
+      passings,
+      cam: new CourseCamera({
+        track: tr,
+        crsCode: CRS,
+        course: c,
+        passings,
+        settings: { ...DEFAULT_COURSE_CAMERA, approachEnabled: false, zoomInLimit: 500 },
+        speed: 1,
+        frame: FRAME,
+        legExtras: (li) => (li === 0 ? detour : []),
+        routeDisplay,
+      }),
+    };
+  }
+
+  it('route choices are framed while shown, then the view zooms to the leg', () => {
+    const { cam: c, passings } = cam({ ...r, hold: 20 });
+    const t0 = passings[0].t;
+    const shown = c.viewAt(t0 + 5).view; // routes visible
+    const later = c.viewAt(t0 + 1 + 20 + 30).view; // faded out (fade 2 s, zoom over max(2, 1.5) s)
+    expect(c.routeFraming(0, t0 + 5)).toBe(1);
+    expect(c.routeFraming(0, t0 + 1 + 20 + 30)).toBe(0);
+    expect(later.resolution).toBeLessThan(shown.resolution * 0.8);
+    // While shown, the detour point is inside the frame.
+    const [x, y] = screen(shown, at(-200, -500));
+    expect(x).toBeGreaterThan(0);
+    expect(x).toBeLessThan(FRAME.width);
+    expect(y).toBeGreaterThan(0);
+    expect(y).toBeLessThan(FRAME.height);
+  });
+
+  it('without display settings or with "whole leg" the routes are always framed', () => {
+    const { cam: a, passings } = cam();
+    expect(a.routeFraming(0, passings[0].t + 60)).toBe(1);
+    expect(cam({ ...r, wholeLeg: true }).cam.routeFraming(0, passings[0].t + 60)).toBe(1);
+  });
+});
+
+describe('progressive leg zoom (STORY-42)', () => {
+  // Leg 1: 800 m east with a 150 m detour north in the middle; leg 2: 400 m north.
+  const wp: [number, number][] = [
+    [0, 0],
+    [0, 300],
+    [150, 400],
+    [0, 500],
+    [0, 800],
+    [400, 800],
+  ];
+  function make(settings: Partial<CourseCameraSettings>) {
+    const tr = track(...wp);
+    const c = course([0, 0], [0, 800], [400, 800]);
+    const passings = matchCourse(tr, c);
+    const cam = new CourseCamera({
+      track: tr,
+      crsCode: CRS,
+      course: c,
+      passings,
+      settings: {
+        ...DEFAULT_COURSE_CAMERA,
+        approachEnabled: true,
+        zoomInLimit: 1000,
+        zoomOutLimit: 20000,
+        ...settings,
+      },
+      speed: 1,
+      frame: FRAME,
+    });
+    return { tr, c, passings, cam };
+  }
+  const inside = (xy: number[], pad = 1) =>
+    xy[0] >= -pad && xy[0] <= FRAME.width + pad && xy[1] >= -pad && xy[1] <= FRAME.height + pad;
+
+  it('frames the remaining route, the target and the runner; zooms in only', () => {
+    const { tr, c, passings, cam } = make({ legZoom: 'target', legZoomStopScale: 2000 });
+    const t0 = passings[0].t;
+    const t1 = passings[1].t;
+    let prev = Infinity;
+    for (let t = t0; t <= t1; t += (t1 - t0) / 40) {
+      const v = cam.viewAt(t).view;
+      expect(v.resolution).toBeLessThanOrEqual(prev * (1 + 1e-9));
+      prev = v.resolution;
+      expect(inside(screen(v, c.points[1]))).toBe(true);
+      expect(inside(screen(v, tr.positionAt(t)))).toBe(true);
+      for (let u = t; u <= t1; u += 2) expect(inside(screen(v, tr.positionAt(u)))).toBe(true);
+    }
+    // Near the target it is much closer than the whole-leg fit, but not past the stop scale.
+    const end = cam.viewAt(t1 - 1).view.resolution;
+    expect(end).toBeLessThan(cam.coreLegs[0].resolution * 0.5);
+    expect(end).toBeGreaterThanOrEqual(groundResolutionForScale(2000) * pointScale(CRS, tr.center()) * 0.999);
+  });
+
+  it('is a pure function of t and replaces the approach zoom', () => {
+    const a = make({ legZoom: 'target' });
+    const b = make({ legZoom: 'target' });
+    const t = (a.passings[0].t + a.passings[1].t) / 2;
+    b.cam.viewAt(a.passings[1].t); // different call order
+    expect(b.cam.viewAt(t)).toEqual(a.cam.viewAt(t));
+    const near = a.passings[1].t - 2;
+    const whole = make({ legZoom: 'whole', approachEnabled: false });
+    expect(a.cam.viewAt(near).view.resolution).toBeLessThan(whole.cam.viewAt(near).view.resolution);
+  });
+
+  it('start distance: whole-leg framing until the remaining route is shorter', () => {
+    const { tr, passings, cam } = make({ legZoom: 'target', legZoomStartDistance: 300, approachEnabled: false });
+    const whole = make({ legZoom: 'whole', approachEnabled: false }).cam;
+    const dEnd = tr.positionAt(passings[1].t).d;
+    const early = tr.positionAtDistance(dEnd - 700).t;
+    expect(cam.viewAt(early).view.resolution).toBeCloseTo(whole.viewAt(early).view.resolution, 6);
+    const late = tr.positionAtDistance(dEnd - 50).t;
+    expect(cam.viewAt(late).view.resolution).toBeLessThan(whole.viewAt(late).view.resolution * 0.7);
+  });
+
+  it('zooms steadily over the whole leg and reaches the stop scale only at the target', () => {
+    // Short leg 2 (400 m): the remaining route fits at the stop scale early in the leg. The scale must still keep
+    // changing until the target instead of reaching the stop at once and then only panning.
+    const { tr, passings, cam } = make({ legZoom: 'target', approachEnabled: false, legZoomStopScale: 2000 });
+    const dA = tr.positionAt(passings[1].t).d;
+    const dB = tr.positionAt(passings[2].t).d;
+    const at = (f: number) => cam.legView(1, tr.positionAtDistance(dA + (dB - dA) * f).t).resolution;
+    const stop = groundResolutionForScale(2000) * pointScale(CRS, tr.center());
+    const r = [0.1, 0.3, 0.5, 0.7, 0.9].map(at);
+    for (let k = 1; k < r.length; k++) expect(r[k]).toBeLessThan(r[k - 1] * 0.97);
+    expect(r[2]).toBeGreaterThan(stop * 1.3); // halfway: not yet at the stop scale
+    expect(at(1)).toBeLessThan(stop * 1.15);
+  });
+
+  it('"whole leg" keeps the previous behaviour', () => {
+    const { passings, cam } = make({ legZoom: 'whole', approachEnabled: false });
+    const t = (passings[0].t + passings[1].t) / 2;
+    expect(cam.viewAt(t).view.resolution).toBeCloseTo(cam.legs[0].resolution, 9);
   });
 });

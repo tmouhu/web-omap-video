@@ -6,9 +6,10 @@
  */
 import { formatDistance, formatDuration } from '../format';
 import { decimalSep, translate, type MsgKey, type Params, type VideoLocale } from '../i18n/core';
+import { formatDiff, type SplitRow } from '../results/splits';
 import type { Track } from '../track/track';
 
-export type ComponentKind = 'elevation' | 'pace' | 'heartRate' | 'time' | 'distance';
+export type ComponentKind = 'elevation' | 'pace' | 'heartRate' | 'time' | 'distance' | 'splits';
 
 export interface ComponentStyle {
   background: string;
@@ -30,6 +31,16 @@ export interface ComponentOptions {
   hrZones: number[];
   /** Before the start passing: show a countdown (negative time) or zero. */
   beforeStart: 'countdown' | 'zero';
+  /** Splits: how long a control's splits stay fully visible (video s); the finish has its own time. */
+  splitShow: number;
+  splitShowFinish: number;
+  /** Splits: fade-in / fade-out (video s). */
+  splitFadeIn: number;
+  splitFadeOut: number;
+  /** Splits: solid colour of the frame while nothing is shown (chroma-key it in the editor). */
+  keyColor: string;
+  /** Splits: show leg / total ranks. */
+  showRank: boolean;
 }
 
 export interface ComponentConfig {
@@ -43,13 +54,14 @@ export interface ComponentConfig {
 
 export const COMPONENT_META: Record<
   ComponentKind,
-  { label: string; size: [number, number]; needs?: 'elevation' | 'heartRate' }
+  { label: string; size: [number, number]; needs?: 'elevation' | 'heartRate' | 'results' }
 > = {
   elevation: { label: 'Elevation profile', size: [1200, 300], needs: 'elevation' },
   pace: { label: 'Pace', size: [520, 180] },
   heartRate: { label: 'Heart rate', size: [520, 180], needs: 'heartRate' },
   time: { label: 'Elapsed time', size: [520, 180] },
   distance: { label: 'Distance', size: [520, 180] },
+  splits: { label: 'Splits', size: [760, 200], needs: 'results' },
 };
 
 export const DEFAULT_COMPONENT_STYLE: ComponentStyle = {
@@ -67,6 +79,12 @@ export const DEFAULT_COMPONENT_OPTIONS: ComponentOptions = {
   paceWindow: 10,
   hrZones: [120, 140, 155, 170],
   beforeStart: 'countdown',
+  splitShow: 5,
+  splitShowFinish: 8,
+  splitFadeIn: 0.3,
+  splitFadeOut: 0.5,
+  keyColor: '#00b140',
+  showRank: true,
 };
 
 export function defaultComponents(): ComponentConfig[] {
@@ -94,13 +112,28 @@ export interface ComponentData {
   passings: number[] | null;
   /** Language of the texts in the video (labels, decimal separator). Default English. */
   locale?: VideoLocale;
+  /** Playback speed (track s per video s): display times of the splits component are in video seconds. */
+  speed?: number;
+  /** Split comparison events (control passings with their rows), sorted by time; null = no results. */
+  splits?: SplitEvent[] | null;
+}
+
+/** A control passing shown by the splits component. */
+export interface SplitEvent {
+  /** Track time of the passing. */
+  t: number;
+  /** Control number on the course (1-based); the finish row has `row.finish`. */
+  number: number;
+  row: SplitRow;
 }
 
 const L = (d: ComponentData, key: MsgKey, params?: Params) => translate(d.locale ?? 'en', key, params);
 
-export function isAvailable(kind: ComponentKind, track: Track | null): boolean {
+/** `hasResults`: split comparison data exists (results imported, runner chosen, course synced). */
+export function isAvailable(kind: ComponentKind, track: Track | null, hasResults = false): boolean {
   const need = COMPONENT_META[kind].needs;
   if (!track) return false;
+  if (need === 'results') return hasResults;
   if (need === 'elevation') return track.channels.elevation;
   if (need === 'heartRate') return track.channels.heartRate;
   return true;
@@ -133,6 +166,29 @@ export function hrZone(hr: number, zones: number[]): number {
 }
 
 const ZONE_COLORS = ['#7f8c9d', '#3ccf8e', '#f5d142', '#ff9f2e', '#ff4d4d'];
+
+/**
+ * The split event visible at track time `d.t` and its opacity (0..1): fade in at the passing, fully visible
+ * for the display time, then fade out (all in video seconds). A later passing replaces an earlier one.
+ */
+export function splitsVisibility(d: ComponentData, o: ComponentOptions): { event: SplitEvent; alpha: number } | null {
+  const ev = d.splits;
+  if (!ev?.length) return null;
+  let i = -1;
+  for (let k = 0; k < ev.length; k++) if (ev[k].t <= d.t) i = k;
+  if (i < 0) return null;
+  const e = ev[i];
+  const age = (d.t - e.t) / Math.max(1e-6, d.speed ?? 1);
+  const fin = Math.max(0, o.splitFadeIn);
+  const show = Math.max(0, e.row.finish ? o.splitShowFinish : o.splitShow);
+  const fout = Math.max(0, o.splitFadeOut);
+  let alpha: number;
+  if (age < fin) alpha = age / fin;
+  else if (age < fin + show) alpha = 1;
+  else if (age < fin + show + fout) alpha = 1 - (age - fin - show) / fout;
+  else alpha = 0;
+  return alpha > 0 ? { event: e, alpha } : null;
+}
 
 // ---------------------------------------------------------------- elevation profile data
 
@@ -401,8 +457,65 @@ export function drawComponent(ctx: CanvasRenderingContext2D, cfg: ComponentConfi
     case 'elevation':
       drawElevation(ctx, cfg, d);
       break;
+    case 'splits':
+      drawSplits(ctx, cfg, d);
+      break;
   }
   ctx.restore();
+}
+
+const LEAD_COLOR = '#3ccf8e';
+
+/** Splits: key colour while hidden; the card fades in over it at each control passing. */
+function drawSplits(ctx: CanvasRenderingContext2D, cfg: ComponentConfig, d: ComponentData) {
+  const { width: w, height: h, style: s, options: o } = cfg;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = o.keyColor;
+  ctx.fillRect(0, 0, w, h);
+  const vis = splitsVisibility(d, o);
+  if (!vis) return;
+  const { row, number } = vis.event;
+  ctx.globalAlpha = vis.alpha;
+  ctx.fillStyle = s.background;
+  ctx.fillRect(0, 0, w, h);
+
+  const pad = h * 0.12;
+  const labelY = pad + h * 0.12;
+  const valueY = h * 0.62;
+  const diffY = h - pad;
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  const label = (text: string, x: number) => {
+    if (!s.showLabel) return;
+    ctx.font = `600 ${h * 0.12}px ${FONT}`;
+    ctx.fillStyle = s.muted;
+    ctx.fillText(text.toUpperCase(), x, labelY);
+  };
+
+  // Control number (or finish).
+  const colW = (w - pad * 2) / 3.2;
+  label(row.finish ? L(d, 'vid.finish') : L(d, 'vid.control'), pad);
+  ctx.font = `800 ${h * 0.46}px ${FONT}`;
+  ctx.fillStyle = s.accent;
+  fillTabular(ctx, row.finish ? '◎' : String(number), pad, h * 0.78);
+
+  const column = (x: number, title: string, time: number | null, diff: number | null, rank: number | null) => {
+    label(title, x);
+    ctx.font = `700 ${h * 0.3}px ${FONT}`;
+    ctx.fillStyle = s.text;
+    fillTabular(ctx, time === null ? '–' : formatDuration(time), x, valueY);
+    ctx.font = `700 ${h * 0.2}px ${FONT}`;
+    ctx.fillStyle = diff === null ? s.muted : diff < 0.5 ? LEAD_COLOR : s.accent;
+    const dw = fillTabular(ctx, formatDiff(diff), x, diffY);
+    if (o.showRank && rank !== null) {
+      ctx.font = `600 ${h * 0.15}px ${FONT}`;
+      ctx.fillStyle = s.muted;
+      ctx.fillText(`${rank}.`, x + dw + h * 0.08, diffY);
+    }
+  };
+  column(pad + colW * 1.0, L(d, 'vid.splitLeg'), row.leg, row.legDiff, row.legRank);
+  column(pad + colW * 2.1, L(d, 'vid.splitTotal'), row.elapsed, row.totalDiff, row.totalRank);
+  ctx.globalAlpha = 1;
 }
 
 function splitUnit(text: string): [string, string] {

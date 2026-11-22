@@ -1,17 +1,19 @@
 <script lang="ts">
+  import { RASTER_ACCEPT } from '../../lib/raster/load';
   import { t } from '../i18n.svelte';
   /**
    * Central map stage: the preview frame (exact video framing, freely resizable), the OpenLayers layer
    * stack from `app.layers`, the scene overlay canvas, drag-and-drop of GPX/map files, map clicks for
    * georeferencing, and the playback loop.
    * Playing → view comes from timeline.frameStateAt(t) (what the export renders).
-   * Paused → free pan/zoom, north-up (STORY-5/7).
+   * Paused → free pan/zoom, north-up (STORY-5/7; map north when a raster map is loaded).
    */
   import OlMap from 'ol/Map';
   import View from 'ol/View';
   import type BaseLayer from 'ol/layer/Base';
   import { defaults as defaultInteractions } from 'ol/interaction/defaults';
-  import { boundingExtent } from 'ol/extent';
+  import LineString from 'ol/geom/LineString';
+  import Polygon from 'ol/geom/Polygon';
   import { onMount, untrack } from 'svelte';
   import { app, MIN_FRAME } from '../state.svelte';
   import { createOlLayer, type LayerDesc } from '../../lib/map/layerModel';
@@ -21,7 +23,7 @@
   import { formatRouteLength, routeLength, routesForLeg } from '../../lib/course/routes';
   import { forward, inverse, pointScale } from '../../lib/geo/crs';
   import { apply, type Pt } from '../../lib/raster/affine';
-  import { rasterExtent, viewAffine, viewToPixel, type RasterMap } from '../../lib/raster/rasterMap';
+  import { viewAffine, viewToPixel, type RasterMap } from '../../lib/raster/rasterMap';
   import type { ViewState } from '../../lib/anim/timeline';
   import type { GpxData } from '../../lib/gpx/gpx';
   import { drawEditorMarks, installTools, syncInteractions } from '../mapTools';
@@ -176,8 +178,20 @@
     // Fit newly added data: a new raster (not a georeference update) or a new track.
     if (raster && raster.levels !== fittedRasterLevels) {
       fittedRasterLevels = raster.levels;
-      map!.getView().setRotation(0);
-      map!.getView().fit(rasterExtent(raster, crs), { padding: [30, 30, 30, 30] });
+      // Orienteering map north up: rotate the view so the image is upright, then fit its outline.
+      const A = viewAffine(raster, crs);
+      const { width: w, height: h } = raster;
+      const corners = (
+        [
+          [0, 0],
+          [w, 0],
+          [w, h],
+          [0, h],
+          [0, 0],
+        ] as [number, number][]
+      ).map((p) => apply(A, p));
+      map!.getView().setRotation(app.mapNorth);
+      map!.getView().fit(new Polygon([corners]), { padding: [30, 30, 30, 30] });
     } else if (app.track && app.gpx !== lastGpx) {
       fitTrack();
     }
@@ -213,7 +227,7 @@
         applyFrame();
       } else if (wasPlaying) {
         wasPlaying = false;
-        view.animate({ rotation: 0, duration: 250 });
+        view.animate({ rotation: app.mapNorth, duration: 250 });
       } else if (t !== lastTime) {
         view.setCenter(tl.frameStateAt(t, app.frame).positionXY);
       }
@@ -240,20 +254,65 @@
     });
   });
 
-  // Editing tools work north-up (centre and zoom kept).
+  // Map north changed (raster removed or re-georeferenced): turn the paused north-up view to it (rotation only).
+  // Not in "video view" (it shows the frame, updated on the next seek), not during georeferencing; a new raster
+  // is rotated by its fit.
+  $effect(() => {
+    const north = app.mapNorth;
+    untrack(() => {
+      if (!mapReady || app.playing || app.georef.active) return;
+      if (app.followFrame && app.tool === 'none') return;
+      const view = map!.getView();
+      if (Math.abs(normalizeRotation(view.getRotation() - north)) > 1e-6)
+        view.animate({ rotation: north, duration: 250 });
+    });
+  });
+
+  // Editing tools work north-up – map north with a raster map (centre and zoom kept). Drawing route choices
+  // shows the selected leg as in the video: start at the bottom, target at the top (also when the leg changes).
   let lastTool = app.tool;
+  let lastRouteLeg = -1;
   $effect(() => {
     const t = app.tool;
+    const leg = app.routeLeg;
     untrack(() => {
-      if (mapReady && t !== 'none' && lastTool === 'none') {
+      if (mapReady && t === 'route' && (lastTool !== 'route' || leg !== lastRouteLeg)) {
+        orientToLeg(leg);
+      } else if (mapReady && t !== 'none' && lastTool === 'none') {
         map!.getView().cancelAnimations();
-        map!.getView().setRotation(0);
+        map!.getView().setRotation(app.mapNorth);
       } else if (mapReady && t === 'none' && lastTool !== 'none' && app.followFrame && app.timeline) {
         applyFrame();
       }
       lastTool = t;
+      lastRouteLeg = t === 'route' ? leg : -1;
     });
   });
+
+  /** Leg li rotated like the leg-by-leg camera (leg direction up) and fitted to its points, routes and GPX. */
+  function orientToLeg(li: number) {
+    const c = app.course;
+    const a = c?.points[li];
+    const b = c?.points[li + 1];
+    if (!map || !c || !a || !b) return;
+    const crs = app.crs.code;
+    const A = forward(crs, a);
+    const B = forward(crs, b);
+    const coords: [number, number][] = [A, B];
+    for (const r of routesForLeg(app.routes, c, li)) for (const p of r.points) coords.push(forward(crs, p));
+    const ps = app.passings;
+    const tr = app.track;
+    if (ps && tr && ps[li + 1]) {
+      const t0 = ps[li].t;
+      const t1 = ps[li + 1].t;
+      const step = Math.max(1, (t1 - t0) / 300);
+      for (let x = t0; x <= t1; x += step) coords.push(forward(crs, tr.positionAt(x)));
+    }
+    const view = map.getView();
+    view.cancelAnimations();
+    if (Math.hypot(B[0] - A[0], B[1] - A[1]) > 1e-6) view.setRotation(-Math.atan2(B[0] - A[0], B[1] - A[1]));
+    view.fit(new LineString(coords), { padding: [50, 40, 50, 40] });
+  }
 
   // Scale changed while paused → show that scale at the current position (STORY-6).
   let lastScale = app.free.scale;
@@ -305,13 +364,18 @@
     if (mapReady) syncInteractions(map!);
   });
 
+  /** Angle difference wrapped to (−π, π]. */
+  function normalizeRotation(a: number): number {
+    return Math.atan2(Math.sin(a), Math.cos(a));
+  }
+
   function fitTrack() {
     if (!map || !app.track) return;
     const xy = projectedTrack(app.track, app.crs.code);
     const coords: [number, number][] = [];
     for (let i = 0; i < xy.length; i += 2) coords.push([xy[i], xy[i + 1]]);
-    map.getView().setRotation(0);
-    map.getView().fit(boundingExtent(coords), { padding: [40, 40, 60, 40] });
+    map.getView().setRotation(app.mapNorth);
+    map.getView().fit(new LineString(coords), { padding: [40, 40, 60, 40] });
   }
 
   function currentViewState(): ViewState | null {
@@ -535,8 +599,7 @@
   });
   let viewTick = $state(0);
 
-  const accept =
-    '.omvproj,.xml,.gpx,.jpg,.jpeg,.png,.gif,.webp,.bmp,.kmz,.kml,.prj,.jgw,.jpgw,.pgw,.pngw,.tfw,.gfw,.wld';
+  const accept = `.omvproj,.xml,.gpx,${RASTER_ACCEPT}`;
 </script>
 
 <div

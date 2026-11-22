@@ -9,6 +9,8 @@
  * - Transitions (STORY-25): rotation (short way), log-resolution and centre are eased from the previous leg's view
  *   to the next one; time keeps running.
  * - Approach zoom (STORY-27): before a passing the view zooms towards the target control and the runner.
+ * - Progressive leg zoom (STORY-42, optional): the leg view is fitted to the route still to run (runner → target
+ *   passing, as actually run) plus the target, zooming in continuously and never out; replaces the approach zoom.
  *
  * All durations given in VIDEO seconds are converted to track seconds with `speed`.
  */
@@ -18,7 +20,24 @@ import { pointScale } from '../geo/crs';
 import type { Course } from '../course/course';
 import type { Passing } from '../course/match';
 import type { Track } from '../track/track';
-import type { ViewState } from './timeline';
+import type { RouteDisplaySettings, ViewState } from './timeline';
+
+/** Track seconds per display-time second: video time (× speed) or real time (1×). */
+export const routeTimeScale = (r: RouteDisplaySettings, speed: number) => (r.timeBase === 'real' ? 1 : speed);
+
+/** Route-choice opacity: fade in at `start`, hold, fade out; never past the end of the leg. */
+export function routeAlpha(t: number, start: number, legEnd: number, r: RouteDisplaySettings, speed: number): number {
+  if (!Number.isFinite(start) || t < start || t >= legEnd) return 0;
+  const k = routeTimeScale(r, speed);
+  const fi = Math.max(1e-6, r.fadeIn * k);
+  const x = t - start;
+  if (x < fi) return x / fi;
+  if (r.wholeLeg) return 1;
+  const hold = r.hold * k;
+  if (x < fi + hold) return 1;
+  const fo = Math.max(1e-6, r.fadeOut * k);
+  return Math.max(0, 1 - (x - fi - hold) / fo);
+}
 
 export type Easing = 'cubic' | 'sine' | 'linear';
 
@@ -44,6 +63,12 @@ export interface CourseCameraSettings {
   panBox: number;
   /** View after the finish: keep the last leg or show the whole course. */
   afterFinish: 'hold' | 'overview';
+  /** Leg framing: the whole leg, or zoom in towards the target with the remaining route (STORY-42). */
+  legZoom: 'whole' | 'target';
+  /** Progressive zoom stops at this scale (or the zoom-in limit, if that is larger). */
+  legZoomStopScale: number;
+  /** Progressive zoom starts when the remaining route is shorter than this (m); 0 = from the leg start. */
+  legZoomStartDistance: number;
 }
 
 export const DEFAULT_COURSE_CAMERA: CourseCameraSettings = {
@@ -60,6 +85,9 @@ export const DEFAULT_COURSE_CAMERA: CourseCameraSettings = {
   approachDuration: 2,
   panBox: 0.6,
   afterFinish: 'hold',
+  legZoom: 'whole',
+  legZoomStopScale: 5000,
+  legZoomStartDistance: 0,
 };
 
 export const EASINGS: Record<Easing, (x: number) => number> = {
@@ -77,6 +105,17 @@ export function lerpAngle(a: number, b: number, f: number): number {
   if (d > Math.PI) d -= 2 * Math.PI;
   if (d < -Math.PI) d += 2 * Math.PI;
   return a + d * f;
+}
+
+/** Precomputed progressive-zoom framing of one leg, sampled in track time (see `zoomSeries`). */
+interface ZoomSeries {
+  t0: number;
+  step: number;
+  /** Resolution, centre in leg coordinates (r, f), and whether the remaining route needs panning. */
+  res: Float64Array;
+  cr: Float64Array;
+  cf: Float64Array;
+  pans: Uint8Array;
 }
 
 interface Box {
@@ -116,6 +155,13 @@ export interface CourseCameraInput {
   frame: { width: number; height: number };
   /** Extra points to keep in view per leg (route choices), by leg index. */
   legExtras?: (legIndex: number) => LatLon[];
+  /** "North-up" rotation for the overview (orienteering map north with a raster map), OL radians. */
+  northRotation?: number;
+  /**
+   * When route choices are shown. With it, the leg framing includes the route choices only while they are shown
+   * and zooms to the leg itself (GPX, start, target) as they fade out; without it they are always included.
+   */
+  routeDisplay?: RouteDisplaySettings;
 }
 
 export interface CameraState {
@@ -131,14 +177,17 @@ export interface CameraState {
 }
 
 export class CourseCamera {
+  /** Leg plans including the route choices. */
   readonly legs: LegPlan[];
+  /** Leg plans without route choices (GPX segment and the two leg points only). */
+  readonly coreLegs: LegPlan[];
   /** Transition start/end (track s) INTO leg i (index 0: −Infinity). */
   readonly tStart: number[];
   readonly tEnd: number[];
   private readonly resMin: number;
   private readonly resMax: number;
   private readonly rot2: (xy: [number, number], rot: number, origin: [number, number]) => [number, number];
-  private readonly overview: { center: [number, number]; resolution: number } | null;
+  private readonly overview: ViewState | null;
 
   constructor(private readonly i: CourseCameraInput) {
     const { track, crsCode, course, passings, settings, speed, frame } = i;
@@ -155,8 +204,14 @@ export class CourseCamera {
 
     const pts = course.points.map((p) => forward(crsCode, p));
     this.legs = [];
+    this.coreLegs = [];
     for (let li = 0; li + 1 < pts.length; li++) {
-      this.legs.push(this.planLeg(li, pts[li], pts[li + 1], passings[li].t, passings[li + 1].t));
+      const extras = i.legExtras?.(li) ?? [];
+      const full = this.planLeg(li, pts[li], pts[li + 1], passings[li].t, passings[li + 1].t, extras);
+      this.legs.push(full);
+      this.coreLegs.push(
+        extras.length ? this.planLeg(li, pts[li], pts[li + 1], passings[li].t, passings[li + 1].t, []) : full,
+      );
     }
 
     // Transition schedule (in track seconds).
@@ -185,15 +240,22 @@ export class CourseCamera {
     return { mx: m, my: m };
   }
 
-  private planLeg(index: number, a: [number, number], b: [number, number], t0: number, t1: number): LegPlan {
-    const { track, crsCode, frame, legExtras } = this.i;
+  private planLeg(
+    index: number,
+    a: [number, number],
+    b: [number, number],
+    t0: number,
+    t1: number,
+    extras: LatLon[],
+  ): LegPlan {
+    const { track, crsCode, frame } = this.i;
     const bearing = (Math.atan2(b[0] - a[0], b[1] - a[1]) * 180) / Math.PI;
     const rotation = -(bearing * Math.PI) / 180;
     const content: [number, number][] = [a, b];
     // GPX segment of the leg (sampled about once per second of track).
     const step = Math.max(1, (t1 - t0) / 600);
     for (let t = t0; t <= t1; t += step) content.push(forward(crsCode, track.positionAt(t)));
-    for (const p of legExtras?.(index) ?? []) content.push(forward(crsCode, p));
+    for (const p of extras) content.push(forward(crsCode, p));
     const rf = content.map((p) => this.rot2(p, rotation, a));
     const box: Box = {
       rmin: Math.min(...rf.map((p) => p[0])),
@@ -217,17 +279,19 @@ export class CourseCamera {
     for (let k = 0; k < track.points.length; k += Math.max(1, Math.floor(track.points.length / 500))) {
       all.push(forward(crsCode, track.points[k]));
     }
-    const xs = all.map((p) => p[0]);
-    const ys = all.map((p) => p[1]);
+    // Fit in the "north-up" frame (map north with a raster map).
+    const rotation = this.i.northRotation ?? 0;
+    const o = all[0];
+    const rf = all.map((p) => this.rot2(p, rotation, o));
+    const rs = rf.map((p) => p[0]);
+    const fs = rf.map((p) => p[1]);
     const { mx, my } = this.margins();
     const res = Math.max(
-      (Math.max(...xs) - Math.min(...xs)) / Math.max(20, frame.width - 2 * mx),
-      (Math.max(...ys) - Math.min(...ys)) / Math.max(20, frame.height - 2 * my),
+      (Math.max(...rs) - Math.min(...rs)) / Math.max(20, frame.width - 2 * mx),
+      (Math.max(...fs) - Math.min(...fs)) / Math.max(20, frame.height - 2 * my),
     );
-    return {
-      center: [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2] as [number, number],
-      resolution: Math.max(this.resMin, res),
-    };
+    const mid: [number, number] = [(Math.max(...rs) + Math.min(...rs)) / 2, (Math.max(...fs) + Math.min(...fs)) / 2];
+    return { center: this.fromLeg(mid, rotation, o), resolution: Math.max(this.resMin, res), rotation };
   }
 
   /** Leg coordinates (r, f) relative to `origin` → view CRS. */
@@ -253,14 +317,181 @@ export class CourseCamera {
     return [x / n, y / n];
   }
 
-  /** The leg's own view at time t (pan + approach zoom), without transitions. */
+  /** When leg li's route choices appear (track s), as in the video (STORY-31). */
+  routeShownAt(li: number): number {
+    if (li === 0) return this.i.passings[0].t;
+    return this.i.routeDisplay?.appear === 'transition' ? this.tStart[li] : this.tEnd[li];
+  }
+
+  /**
+   * Weight (0..1) of the route choices in leg li's framing at t: 1 while they are shown, easing to 0 as they fade
+   * out (over the fade-out or the transition duration, whichever is longer), 0 afterwards.
+   */
+  routeFraming(li: number, t: number): number {
+    const r = this.i.routeDisplay;
+    if (this.legs[li] === this.coreLegs[li]) return 0; // no route choices on this leg
+    if (!r || r.wholeLeg) return 1;
+    const k = routeTimeScale(r, this.i.speed);
+    const foStart = this.routeShownAt(li) + (r.fadeIn + r.hold) * k;
+    if (t <= foStart) return 1;
+    const z = Math.max(r.fadeOut * k, this.i.settings.transitionDuration * this.i.speed, 1e-6);
+    return 1 - EASINGS[this.i.settings.easing](clamp01((t - foStart) / z));
+  }
+
+  /** The leg's own view at time t (route framing + pan + approach zoom), without transitions. */
   legView(li: number, t: number): ViewState {
     const L = this.legs[li];
-    const { settings, frame, speed, course, crsCode } = this.i;
-    let center = L.center;
-    let res = L.resolution;
-    const origin = forward(crsCode, course.points[li]);
+    const { settings, speed } = this.i;
+    const w = this.routeFraming(li, t);
+    const progressive = settings.legZoom === 'target';
+    const coreView = () => (progressive ? this.progressiveView(li, t) : this.panView(this.coreLegs[li], li, t));
+    let { center, res } = w > 0 ? this.panView(L, li, t) : coreView();
+    if (w > 0 && w < 1) {
+      const core = coreView();
+      res = Math.exp(lerp(Math.log(core.res), Math.log(res), w));
+      center = [lerp(core.center[0], center[0], w), lerp(core.center[1], center[1], w)];
+    }
+    const { crsCode } = this.i;
 
+    // Approach zoom towards the target control (not with the progressive zoom: they would fight).
+    if (settings.approachEnabled && !progressive) {
+      const a0 = Math.max(L.t1 - settings.approachSeconds, this.tEnd[li] ?? -Infinity, L.t0);
+      const dur = Math.max(1e-6, settings.approachDuration * speed);
+      if (L.t1 - a0 > settings.approachSeconds * 0.4 && t > a0) {
+        const e = EASINGS[settings.easing](clamp01((t - a0) / dur));
+        const k = pointScale(crsCode, this.i.track.center());
+        const target = Math.min(res, Math.max(this.resMin, groundResolutionForScale(settings.approachScale) * k));
+        const runner = this.smoothRunner(Math.min(t, L.t1), 3);
+        const c: [number, number] = [
+          L.target[0] + 0.35 * (runner[0] - L.target[0]),
+          L.target[1] + 0.35 * (runner[1] - L.target[1]),
+        ];
+        res = Math.exp(lerp(Math.log(res), Math.log(target), e));
+        center = [lerp(center[0], c[0], e), lerp(center[1], c[1], e)];
+      }
+    }
+    return { center, resolution: res, rotation: L.rotation };
+  }
+
+  private zoomCache = new Map<number, ZoomSeries>();
+
+  /**
+   * Progressive leg zoom at t: the leg view fitted to the remaining route (STORY-42), from a precomputed series.
+   * Where even the remaining route does not fit at the zoom-out limit, the normal panning view is used.
+   */
+  private progressiveView(li: number, t: number): { center: [number, number]; res: number } {
+    let z = this.zoomCache.get(li);
+    if (!z) this.zoomCache.set(li, (z = this.zoomSeries(li)));
+    const n = z.res.length;
+    const x = Math.min(n - 1, Math.max(0, (t - z.t0) / z.step));
+    const i = Math.min(Math.floor(x), n - 2);
+    const f = Math.min(1, x - i);
+    if (z.pans[i] || z.pans[i + 1]) return this.panView(this.coreLegs[li], li, t);
+    const L = this.legs[li];
+    const origin = forward(this.i.crsCode, this.i.course.points[li]);
+    const rf: [number, number] = [lerp(z.cr[i], z.cr[i + 1], f), lerp(z.cf[i], z.cf[i + 1], f)];
+    return {
+      center: this.fromLeg(rf, L.rotation, origin),
+      res: Math.exp(lerp(Math.log(z.res[i]), Math.log(z.res[i + 1]), f)),
+    };
+  }
+
+  /**
+   * Framing of leg li over its duration. For each sample time τ the content is the runner at τ, the GPX from τ to
+   * the target passing and the target point (leg coordinates). The resolution is the suffix maximum of the fits
+   * (so it only decreases: zoom in, never out), clamped to [stop scale, whole-leg fit], then smoothed with a
+   * forward exponential filter (stays ≥ the fit, so the content still fits). The centre is smoothed the same way
+   * and clamped so the content box stays inside the frame.
+   */
+  private zoomSeries(li: number): ZoomSeries {
+    const L = this.coreLegs[li];
+    const { track, crsCode, frame, settings, speed, course } = this.i;
+    const origin = forward(crsCode, course.points[li]);
+    const target = this.rot2(forward(crsCode, course.points[li + 1]), L.rotation, origin);
+    const t0 = L.t0;
+    const n = Math.max(2, Math.min(600, Math.ceil(Math.max(0, L.t1 - t0) / 0.25) + 1));
+    const step = Math.max(1e-6, (L.t1 - t0) / (n - 1));
+    const pr = new Float64Array(n);
+    const pf = new Float64Array(n);
+    const dist = new Float64Array(n);
+    for (let k = 0; k < n; k++) {
+      const p = track.positionAt(t0 + k * step);
+      const q = this.rot2(forward(crsCode, p), L.rotation, origin);
+      pr[k] = q[0];
+      pf[k] = q[1];
+      dist[k] = p.d;
+    }
+    // Suffix boxes of the remaining route, including the target.
+    const rmin = new Float64Array(n);
+    const rmax = new Float64Array(n);
+    const fmin = new Float64Array(n);
+    const fmax = new Float64Array(n);
+    for (let k = n - 1; k >= 0; k--) {
+      const nx = k + 1 < n;
+      rmin[k] = Math.min(pr[k], nx ? rmin[k + 1] : target[0]);
+      rmax[k] = Math.max(pr[k], nx ? rmax[k + 1] : target[0]);
+      fmin[k] = Math.min(pf[k], nx ? fmin[k + 1] : target[1]);
+      fmax[k] = Math.max(pf[k], nx ? fmax[k + 1] : target[1]);
+    }
+    const { mx, my } = this.margins();
+    const w = Math.max(20, frame.width - 2 * mx);
+    const h = Math.max(20, frame.height - 2 * my);
+    const kScale = pointScale(crsCode, track.center());
+    const stopRes = Math.max(this.resMin, groundResolutionForScale(settings.legZoomStopScale) * kScale);
+    const whole = L.resolution;
+    const wholeC = this.rot2(L.center, L.rotation, origin);
+    const dEnd = track.positionAt(L.t1).d;
+    const startD = settings.legZoomStartDistance;
+
+    const res = new Float64Array(n);
+    const pans = new Uint8Array(n);
+    const raw = new Float64Array(n);
+    // The zoom follows the remaining distance: from the whole-leg scale where the zoom starts to the stop scale
+    // at the target (log-linear, i.e. a steady zoom rate per metre), never tighter than the remaining route needs.
+    // (Fitting the remaining route alone reaches the stop scale early in the leg, and the rest of it only pans.)
+    let kStart = 0;
+    while (kStart < n - 1 && startD > 0 && dEnd - dist[kStart] > startD) kStart++;
+    const remaining0 = Math.max(1e-6, dEnd - dist[kStart]);
+    const stop = Math.min(whole, stopRes);
+    for (let k = 0; k < n; k++) {
+      const fit = Math.max((rmax[k] - rmin[k]) / w, (fmax[k] - fmin[k]) / h, 1e-9);
+      const p = k < kStart ? 0 : clamp01(1 - (dEnd - dist[k]) / remaining0);
+      const profile = Math.exp(lerp(Math.log(whole), Math.log(stop), p));
+      raw[k] = Math.min(whole, Math.max(profile, fit));
+      pans[k] = fit > this.resMax * 1.0001 ? 1 : 0;
+    }
+    // Zoom in only: suffix maximum.
+    for (let k = n - 1; k >= 0; k--) res[k] = k + 1 < n ? Math.max(raw[k], res[k + 1]) : raw[k];
+    // Smooth (forward filter keeps res ≥ the suffix maximum, so the content still fits) in log space.
+    const tau = Math.max(0.5, 1.5 * speed);
+    const a = 1 - Math.exp(-step / tau);
+    for (let k = 1; k < n; k++) res[k] = Math.exp(Math.log(res[k - 1]) + (Math.log(res[k]) - Math.log(res[k - 1])) * a);
+    // Centre: middle of the remaining box (whole-leg centre while gated), smoothed, then clamped into the range
+    // that keeps the box in the frame at the chosen resolution.
+    const cr = new Float64Array(n);
+    const cf = new Float64Array(n);
+    for (let k = 0; k < n; k++) {
+      const gated = k < kStart;
+      const dr = gated ? wholeC[0] : (rmin[k] + rmax[k]) / 2;
+      const df = gated ? wholeC[1] : (fmin[k] + fmax[k]) / 2;
+      cr[k] = k === 0 ? dr : cr[k - 1] + (dr - cr[k - 1]) * a;
+      cf[k] = k === 0 ? df : cf[k - 1] + (df - cf[k - 1]) * a;
+      const hw = (w / 2) * res[k];
+      const hh = (h / 2) * res[k];
+      const clampAxis = (c: number, lo: number, hi: number, half: number) =>
+        hi - lo >= 2 * half ? (lo + hi) / 2 : Math.min(lo + half, Math.max(hi - half, c));
+      cr[k] = clampAxis(cr[k], rmin[k], rmax[k], hw);
+      cf[k] = clampAxis(cf[k], fmin[k], fmax[k], hh);
+    }
+    return { t0, step, res, cr, cf, pans };
+  }
+
+  /** A leg plan's fitted view at t: its centre, or panning with the runner when it does not fit. */
+  private panView(L: LegPlan, li: number, t: number): { center: [number, number]; res: number } {
+    const { settings, frame, course, crsCode } = this.i;
+    let center = L.center;
+    const res = L.resolution;
+    const origin = forward(crsCode, course.points[li]);
     if (L.pans) {
       // Keep the smoothed runner inside the central pan box, the view inside the leg box.
       const hw = (frame.width * res) / 2;
@@ -282,25 +513,7 @@ export class CourseCamera {
       cf = Math.min(rf + bh, Math.max(rf - bh, cf));
       center = this.fromLeg([cr, cf], L.rotation, origin);
     }
-
-    // Approach zoom towards the target control.
-    if (settings.approachEnabled) {
-      const a0 = Math.max(L.t1 - settings.approachSeconds, this.tEnd[li] ?? -Infinity, L.t0);
-      const dur = Math.max(1e-6, settings.approachDuration * speed);
-      if (L.t1 - a0 > settings.approachSeconds * 0.4 && t > a0) {
-        const e = EASINGS[settings.easing](clamp01((t - a0) / dur));
-        const k = pointScale(crsCode, this.i.track.center());
-        const target = Math.min(res, Math.max(this.resMin, groundResolutionForScale(settings.approachScale) * k));
-        const runner = this.smoothRunner(Math.min(t, L.t1), 3);
-        const c: [number, number] = [
-          L.target[0] + 0.35 * (runner[0] - L.target[0]),
-          L.target[1] + 0.35 * (runner[1] - L.target[1]),
-        ];
-        res = Math.exp(lerp(Math.log(res), Math.log(target), e));
-        center = [lerp(center[0], c[0], e), lerp(center[1], c[1], e)];
-      }
-    }
-    return { center, resolution: res, rotation: L.rotation };
+    return { center, res };
   }
 
   private blend(A: ViewState, B: ViewState, x: number): ViewState {
@@ -339,7 +552,7 @@ export class CourseCamera {
       const s = last.t1 + this.i.settings.transitionDelay * this.i.speed;
       const D = this.i.settings.transitionDuration * this.i.speed;
       const A = this.legView(li, last.t1);
-      const B: ViewState = { ...this.overview, rotation: 0 };
+      const B: ViewState = this.overview;
       return state(t <= s ? A : this.blend(A, B, (t - s) / Math.max(1e-6, D)));
     }
     return state(this.legView(li, Math.min(t, li === n - 1 ? last.t1 : t)));

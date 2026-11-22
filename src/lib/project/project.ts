@@ -21,6 +21,7 @@ import type { GpxEdit } from '../gpx/edits';
 import type { GpxData, GpxPoint } from '../gpx/gpx';
 import { defaultLayers, type LayerDesc } from '../map/layerModel';
 import type { RasterGeoref } from '../raster/rasterMap';
+import type { ResultsDoc } from '../results/results';
 import { DEFAULT_COURSE_STYLE, type CourseStyle } from '../render/overprint';
 import { DEFAULT_SCENE_STYLE, type SceneStyle } from '../render/scene';
 
@@ -96,6 +97,8 @@ export interface ProjectDoc {
   /** Manual passing times, absolute GPX-clock ms by course point id. */
   passingOverrides: Record<string, number>;
   matchRadius: number;
+  /** Imported results (STORY-41), null if none. */
+  results: ResultsDoc | null;
   settings: ProjectSettings;
 }
 
@@ -164,7 +167,27 @@ export function migrate(raw: unknown): ProjectDoc {
     routes: Array.isArray(raw.routes) ? (raw.routes as RouteChoice[]) : [],
     passingOverrides: isObj(raw.passingOverrides) ? (raw.passingOverrides as Record<string, number>) : {},
     matchRadius: typeof raw.matchRadius === 'number' ? raw.matchRadius : 50,
+    results: isObj(raw.results) && isObj(raw.results.cls) ? migrateResults(raw.results) : null,
     settings: s,
+  };
+}
+
+function migrateResults(r: Record<string, unknown>): ResultsDoc {
+  return {
+    ...mergeDefaults<Omit<ResultsDoc, 'cls'>>(
+      {
+        source: '',
+        version: '3.0',
+        event: '',
+        date: null,
+        runner: null,
+        reference: 'ok',
+        clockOffset: 0,
+        tzOffsetMin: null,
+      },
+      r,
+    ),
+    cls: r.cls as ResultsDoc['cls'],
   };
 }
 

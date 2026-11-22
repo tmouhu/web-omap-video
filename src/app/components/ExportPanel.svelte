@@ -34,7 +34,9 @@
   const r = $derived(app.range);
   const frames = $derived(r ? frameCount(r.end - r.start, app.exportFps, app.speed) : 0);
   const videoSeconds = $derived(frames / app.exportFps);
-  const comps = $derived(app.components.filter((c) => c.enabled && isAvailable(c.kind, app.track)));
+  const comps = $derived(
+    app.components.filter((c) => c.enabled && isAvailable(c.kind, app.track, !!app.splitEvents?.length)),
+  );
   /** Components get a modest fixed bitrate: simple graphics. */
   const compMbps = (w: number, h: number) => Math.max(2, Math.round(autoBitrateMbps(w, h, app.exportFps) * 0.5));
   const outputs = $derived([
@@ -130,6 +132,7 @@
         raster: app.raster,
         origin: range.origin,
         passings: app.passings?.map((p) => p.t) ?? null,
+        splits: app.splitEvents,
         outputs: planned.map((p, i) => ({
           id: p.id,
           kind: p.kind as 'map',

@@ -10,6 +10,7 @@
   import { pixelSize } from '../../lib/raster/affine';
   import { viewAffine } from '../../lib/raster/rasterMap';
   import { formatWorldFile } from '../../lib/raster/worldfile';
+  import { RASTER_ACCEPT, WORLD_FILE_ACCEPT } from '../../lib/raster/load';
   import AddLayerDialog from './AddLayerDialog.svelte';
 
   let addOpen = $state(false);
@@ -35,6 +36,13 @@
     if (files.length) app.addRasterFiles(files);
   }
 
+  function pickWorldFile(e: Event) {
+    const input = e.currentTarget as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    if (files.length) app.applyWorldFile(files);
+  }
+
   function downloadWorldFile() {
     if (!r) return;
     const blob = new Blob([formatWorldFile(r.georef.affine)], { type: 'text/plain' });
@@ -53,6 +61,17 @@
 
   const m = (v: number) => (v >= 100 ? `${v.toFixed(0)} m` : `${v.toFixed(1)} m`);
 </script>
+
+{#snippet crsSelect()}
+  <select bind:value={pendingCrs} aria-label={t('map.crsOfWorldFile')} data-testid="world-crs">
+    <option value="EPSG:3067">{t('map.tm35')}</option>
+    <option value="EPSG:3857">Web Mercator</option>
+    <option value="EPSG:4326">{t('map.wgs84')}</option>
+    {#each Array.from({ length: 60 }, (_, i) => i + 1) as z (z)}
+      <option value={`UTM${z}`}>{t('map.utmZone', { z })}</option>
+    {/each}
+  </select>
+{/snippet}
 
 <section class="section" data-testid="map-panel">
   <div class="sec-head">
@@ -124,9 +143,28 @@
           <button class="btn sm" onclick={() => app.startGeoref()} disabled={app.locked} data-testid="georef-start">
             {r.georef.source === 'placed' ? t('map.georef') : t('map.adjust')}
           </button>
+          <label class="btn sm ghost" title={t('map.loadWorldFileTitle')}>
+            {t('map.loadWorldFile')}
+            <input
+              type="file"
+              multiple
+              hidden
+              accept={WORLD_FILE_ACCEPT}
+              disabled={app.locked}
+              data-testid="world-file-input"
+              onchange={pickWorldFile}
+            />
+          </label>
           <button class="btn sm ghost" onclick={downloadWorldFile} title={t('map.worldFileTitle')}>
             {t('map.worldFile')}
           </button>
+        </div>
+      {/if}
+      {#if app.pendingWorldFile}
+        <p class="note warn">{t('map.whichCrs')}</p>
+        <div class="row gap">
+          {@render crsSelect()}
+          <button class="btn sm primary" onclick={() => app.resolvePendingWorldFile(pendingCrs)}>{t('map.use')}</button>
         </div>
       {/if}
     </div>
@@ -136,14 +174,7 @@
         {t('map.whichCrs')}
       </p>
       <div class="row gap">
-        <select bind:value={pendingCrs} aria-label={t('map.crsOfWorldFile')}>
-          <option value="EPSG:3067">{t('map.tm35')}</option>
-          <option value="EPSG:3857">Web Mercator</option>
-          <option value="EPSG:4326">{t('map.wgs84')}</option>
-          {#each Array.from({ length: 60 }, (_, i) => i + 1) as z (z)}
-            <option value={`UTM${z}`}>{t('map.utmZone', { z })}</option>
-          {/each}
-        </select>
+        {@render crsSelect()}
         <button class="btn sm primary" onclick={() => app.resolvePendingRaster(pendingCrs)}>{t('map.use')}</button>
       </div>
     </div>
@@ -155,7 +186,7 @@
         hidden
         data-testid="raster-input"
         disabled={app.locked || app.rasterLoading}
-        accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.kmz,.kml,.prj,.jgw,.jpgw,.pgw,.pngw,.tfw,.gfw,.wld"
+        accept={RASTER_ACCEPT}
         onchange={pickFiles}
       />
       <strong>{app.rasterLoading ? t('map.loading') : t('map.add')}</strong>
@@ -321,6 +352,12 @@
   }
   .row.gap {
     justify-content: flex-start;
+    /* Button rows wrap instead of widening the inspector (long Finnish labels). */
+    flex-wrap: wrap;
+  }
+  .row.gap select {
+    flex: 1;
+    min-width: 0;
   }
   .name {
     overflow: hidden;
@@ -333,6 +370,13 @@
   .credits {
     display: grid;
     gap: 10px;
+  }
+  /* Grid items may shrink below their content width, so nothing forces horizontal scrolling. */
+  .raster > *,
+  .georef > *,
+  .layers > *,
+  .credits > * {
+    min-width: 0;
   }
   dl {
     display: grid;

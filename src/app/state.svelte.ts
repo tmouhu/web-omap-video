@@ -11,7 +11,19 @@ import { legIndexOf, newRouteId, nextLabelAndColor, routesForLeg, type RouteChoi
 import type { ProjectScene } from '../lib/render/frameScene';
 import type { VideoLocale } from '../lib/i18n/core';
 import { errorText, i18n, t, t as translateMsg } from './i18n.svelte';
-import { defaultComponents, type ComponentConfig } from '../lib/components/components';
+import { defaultComponents, type ComponentConfig, type SplitEvent } from '../lib/components/components';
+import { isResultListXml, parseResultList, type ResultFile, type ResultsDoc } from '../lib/results/results';
+import {
+  compareSplits,
+  guessTzOffset,
+  mapCourseToResults,
+  punchTimes,
+  residuals,
+  runnerStartMs,
+  suggestClockOffset,
+  type SplitRow,
+} from '../lib/results/splits';
+import { fetchResultsFromUrl, searchEvents, type NavisportEvent } from '../lib/results/navisport';
 import {
   defaultSettings,
   mergeDefaults,
@@ -42,13 +54,14 @@ import { matchCourse, validateOverride, type Passing } from '../lib/course/match
 import { applyEdits, deleteEditsFor, findOutliers, type GpxEdit } from '../lib/gpx/edits';
 import { GpxError, parseGpx, type GpxData } from '../lib/gpx/gpx';
 import { creditsText, defaultLayers, type LayerDesc } from '../lib/map/layerModel';
-import { fitTransform, type FitResult, type Pt } from '../lib/raster/affine';
-import { isRasterFile, readRasterFiles, type RasterSource } from '../lib/raster/load';
+import { fitTransform, type Affine, type FitResult, type Pt } from '../lib/raster/affine';
+import { isRasterFile, isWorldFileOnly, readRasterFiles, readWorldFile, type RasterSource } from '../lib/raster/load';
 import {
   buildPyramid,
   georefFromCorners,
   placedGeoref,
   rasterCenter,
+  rasterNorthRotation,
   releaseRaster,
   type RasterGeoref,
   type RasterMap,
@@ -125,6 +138,10 @@ export interface Toast {
 
 export type ThemePref = 'system' | 'dark' | 'light';
 
+/** CRS code from the CRS chooser (`UTM<zone>` = WGS84 / UTM zone N). */
+const crsFromChoice = (code: string): string =>
+  code.startsWith('UTM') ? utmCrs({ lat: 10, lon: +code.slice(3) * 6 - 183 }).code : code;
+
 const loadTheme = (): ThemePref => {
   try {
     const v = localStorage.getItem('omv-theme');
@@ -186,6 +203,58 @@ class AppState {
     return matchCourse(t, c, { radius: this.matchRadius, overrides });
   });
 
+  // --- Results (STORY-41) ---
+  /** Imported result list (chosen class), runner and sync settings. */
+  results = $state.raw<ResultsDoc | null>(null);
+  /** A parsed file with several classes, waiting for the class choice. */
+  pendingResults = $state.raw<{ file: ResultFile; source: string } | null>(null);
+  resultsError = $state('');
+  resultsLoading = $state(false);
+  /** Result row index per course point (-1 start, n finish, null unmatched). */
+  resultMap: (number | null)[] | null = $derived(
+    this.results && this.course ? mapCourseToResults(this.course, this.results.cls.controls) : null,
+  );
+  /** Split comparison of the chosen runner (controls + finish). */
+  splitRows: SplitRow[] | null = $derived(
+    this.results && this.results.runner !== null
+      ? compareSplits(this.results.cls, this.results.runner, this.results.reference)
+      : null,
+  );
+  /** Runner's start in GPX-clock ms (IOF 2.0 local time: zone from the project or guessed from the GPX). */
+  resultStartMs: number | null = $derived.by(() => {
+    const r = this.results;
+    const c = r && r.runner !== null ? r.cls.competitors[r.runner] : null;
+    if (!r || !c) return null;
+    const tz = r.tzOffsetMin ?? (this.track ? guessTzOffset(c, r.date, this.track) : null) ?? 0;
+    return runnerStartMs(c, r.date, tz);
+  });
+  /** Distance (m) between the track at each punch time and its course point, with the current clock offset. */
+  punchResiduals: (number | null)[] | null = $derived.by(() => {
+    const r = this.results;
+    const c = this.course;
+    const map = this.resultMap;
+    const start = this.resultStartMs;
+    if (!r || r.runner === null || !c || !map || start === null || !this.track) return null;
+    return residuals(c, map, r.cls.competitors[r.runner], start, r.clockOffset, this.track);
+  });
+  /** Control passings with their split rows, for the splits video component. */
+  splitEvents: SplitEvent[] | null = $derived.by(() => {
+    const rows = this.splitRows;
+    const map = this.resultMap;
+    const ps = this.passings;
+    const c = this.course;
+    if (!rows || !map || !ps || !c) return null;
+    const out: SplitEvent[] = [];
+    let n = 0;
+    c.points.forEach((p, k) => {
+      if (p.kind === 'control') n++;
+      const r = map[k];
+      if (r === null || r < 0 || !rows[r] || ps[k].status === 'not-found') return;
+      out.push({ t: ps[k].t, number: n, row: rows[r] });
+    });
+    return out.sort((a, b) => a.t - b.t);
+  });
+
   // --- Course-mode animation (EPIC-4) ---
   /** Use the leg-by-leg camera when a valid course and passings exist. */
   courseModeEnabled = $state(true);
@@ -244,6 +313,8 @@ class AppState {
   rasterError = $state('');
   rasterLoading = $state(false);
   pendingRaster = $state.raw<PendingRaster | null>(null);
+  /** World file for the loaded raster whose CRS could not be determined; waits for the user's choice. */
+  pendingWorldFile = $state.raw<Affine | null>(null);
   georef = $state<{ active: boolean; pairs: GeorefPair[]; pendingPixel: Pt | null; prefer: 'auto' | 'similarity' }>({
     active: false,
     pairs: [],
@@ -261,6 +332,8 @@ class AppState {
     }),
   );
   credits = $derived(creditsText(this.layers));
+  /** "North-up" view rotation: the orienteering map's north (image up) when a raster map is loaded, else 0. */
+  mapNorth: number = $derived(this.raster ? rasterNorthRotation(this.raster, this.crs.code) : 0);
   georefFit: FitResult | null = $derived.by(() => {
     if (!this.raster || this.georef.pairs.length === 0) return null;
     return this.fit(this.georef.pairs, this.crs.code);
@@ -305,7 +378,7 @@ class AppState {
             legExtras: (li: number) => routesForLeg(routes, course, li).flatMap((r) => r.points),
           }
         : null;
-    return new Timeline(track, this.crs.code, $state.snapshot(this.free), cm);
+    return new Timeline(track, this.crs.code, $state.snapshot(this.free), cm, this.mapNorth, this.speed);
   });
   /** Everything drawn over the map, shared by preview and export (see lib/render/frameScene.ts). */
   projectScene: ProjectScene | null = $derived(
@@ -355,7 +428,11 @@ class AppState {
     const xml = files.find((f) => /\.xml$/i.test(f.name));
     if (gpx) this.loadGpxText(await gpx.text(), gpx.name.replace(/\.gpx$/i, ''));
     if (raster.length) await this.addRasterFiles(raster);
-    if (xml) this.importCourseXml(await xml.text());
+    if (xml) {
+      const text = await xml.text();
+      if (isResultListXml(text)) this.importResultsXml(text, xml.name);
+      else this.importCourseXml(text);
+    }
     if (!gpx && !raster.length && !xml && files.length) {
       this.error = t('msg.notGpxOrMap', { name: files[0].name });
     }
@@ -489,6 +566,7 @@ class AppState {
       routes: this.routes,
       passingOverrides: this.passingOverrides,
       matchRadius: this.matchRadius,
+      results: this.results,
       settings: this.settings(),
     };
   }
@@ -501,6 +579,7 @@ class AppState {
     releaseRaster(this.raster);
     this.raster = null;
     this.pendingRaster = null;
+    this.pendingWorldFile = null;
     this.gpx = null;
     this.gpxName = '';
     this.gpxEdits = [];
@@ -508,6 +587,9 @@ class AppState {
     this.course = null;
     this.routes = [];
     this.passingOverrides = {};
+    this.results = null;
+    this.pendingResults = null;
+    this.resultsError = '';
     this.layers = defaultLayers();
     this.layerHealth = {};
     this.applySettings(defaultSettings());
@@ -547,6 +629,7 @@ class AppState {
     this.routes = doc.routes;
     this.passingOverrides = doc.passingOverrides;
     this.matchRadius = doc.matchRadius;
+    this.results = doc.results;
     this.applySettings(doc.settings);
     this.lastSaved = doc.modified;
     this.saveState = 'saved';
@@ -582,6 +665,7 @@ class AppState {
   // ---------------- Raster map ----------------
 
   async addRasterFiles(files: File[]): Promise<void> {
+    if (this.raster && isWorldFileOnly(files)) return this.applyWorldFile(files);
     this.rasterError = '';
     this.rasterLoading = true;
     try {
@@ -613,11 +697,45 @@ class AppState {
     }
   }
 
+  /** Replaces the loaded raster's georeferencing with a world file (+ optional .prj). */
+  async applyWorldFile(files: File[]): Promise<void> {
+    const r = this.raster;
+    if (!r) return;
+    this.rasterError = '';
+    this.pendingWorldFile = null;
+    try {
+      const { affine, crs } = await readWorldFile(files, r.width, r.height, this.track?.center() ?? null);
+      if (!(crs && isKnownCrs(crs))) {
+        if (crs) this.rasterError = t('msg.crsUnsupported', { crs });
+        this.pendingWorldFile = affine;
+        return;
+      }
+      this.setRasterGeoref({ crs, affine, source: 'world-file' });
+    } catch (e) {
+      this.rasterError = errorText(e);
+    }
+  }
+
+  /** Completes a pending world file of the loaded raster with the CRS the user chose. */
+  resolvePendingWorldFile(code: string): void {
+    const affine = this.pendingWorldFile;
+    if (!affine) return;
+    this.pendingWorldFile = null;
+    this.rasterError = '';
+    this.setRasterGeoref({ crs: crsFromChoice(code), affine, source: 'world-file' });
+  }
+
+  private setRasterGeoref(georef: RasterGeoref): void {
+    if (!this.raster) return;
+    this.finishGeoref();
+    this.raster = { ...this.raster, georef };
+  }
+
   /** Completes a pending world-file raster with the CRS the user chose. */
   resolvePendingRaster(code: string): void {
     const p = this.pendingRaster;
     if (!p) return;
-    if (code.startsWith('UTM')) code = utmCrs({ lat: 10, lon: +code.slice(3) * 6 - 183 }).code;
+    code = crsFromChoice(code);
     const { width, height } = p.levels[0];
     this.pendingRaster = null;
     this.rasterError = '';
@@ -642,6 +760,7 @@ class AppState {
 
   removeRaster(): void {
     this.cancelGeoref();
+    this.pendingWorldFile = null;
     releaseRaster(this.raster);
     this.raster = null;
     this.layers = this.layers.filter((l) => l.kind !== 'raster');
@@ -881,6 +1000,146 @@ class AppState {
     this.setCourse(c);
     this.passingOverrides = {};
     this.importedCourses = [];
+  }
+
+  // ---------------- Results (STORY-41) ----------------
+
+  /** Imports an IOF XML 2.0/3.0 result list; with several classes the user picks one. */
+  importResultsXml(xml: string, source: string): void {
+    this.resultsError = '';
+    try {
+      const file = parseResultList(xml);
+      if (file.classes.length === 1) this.chooseResultClass(file, 0, source);
+      else this.pendingResults = { file, source };
+    } catch (e) {
+      this.resultsError = errorText(e);
+    }
+  }
+
+  /** Imports results from a Navisport link / event id or any URL serving IOF XML. */
+  async importResultsUrl(url: string): Promise<void> {
+    this.resultsError = '';
+    this.resultsLoading = true;
+    try {
+      const { xml, source } = await fetchResultsFromUrl(url);
+      this.importResultsXml(xml, source);
+    } catch (e) {
+      this.resultsError = errorText(e);
+    } finally {
+      this.resultsLoading = false;
+    }
+  }
+
+  /** Searches public Navisport events (by name, around the GPX date when no dates are given). */
+  async searchNavisport(name: string): Promise<NavisportEvent[]> {
+    this.resultsError = '';
+    this.resultsLoading = true;
+    try {
+      const st = this.track?.startTime;
+      const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+      const q = st && !name.trim() ? { dateFrom: day(st - 86_400_000), dateTo: day(st + 86_400_000) } : {};
+      return await searchEvents({ name, ...q });
+    } catch (e) {
+      this.resultsError = errorText(e);
+      return [];
+    } finally {
+      this.resultsLoading = false;
+    }
+  }
+
+  /** Index of the class whose controls best match the course codes (for preselecting the class). */
+  bestResultClass(file: ResultFile): number {
+    const c = this.course;
+    if (!c) return 0;
+    let best = 0;
+    let bestN = -1;
+    file.classes.forEach((cls, i) => {
+      const n = mapCourseToResults(c, cls.controls).filter(
+        (v) => v !== null && v >= 0 && v < cls.controls.length,
+      ).length;
+      if (n > bestN) [best, bestN] = [i, n];
+    });
+    return best;
+  }
+
+  chooseResultClass(file: ResultFile, index: number, source: string): void {
+    const cls = file.classes[index];
+    if (!cls) return;
+    this.pendingResults = null;
+    this.results = {
+      source,
+      version: file.version,
+      event: file.event,
+      date: file.date,
+      cls,
+      runner: null,
+      reference: 'ok',
+      clockOffset: 0,
+      tzOffsetMin: null,
+    };
+  }
+
+  /** Chooses the user's own result; suggests the clock offset when a course and GPX are there. */
+  setResultRunner(index: number | null): void {
+    if (!this.results) return;
+    this.results = { ...this.results, runner: index, clockOffset: 0, tzOffsetMin: null };
+    if (index !== null) this.autoClockOffset();
+  }
+
+  updateResults(patch: Partial<Pick<ResultsDoc, 'reference' | 'clockOffset' | 'tzOffsetMin'>>): void {
+    if (this.results) this.results = { ...this.results, ...patch };
+  }
+
+  /** Sets the clock offset that best puts the track at the controls at the punch times. */
+  autoClockOffset(): void {
+    const r = this.results;
+    const c = this.course;
+    const map = this.resultMap;
+    const start = this.resultStartMs;
+    if (!r || r.runner === null || !c || !map || start === null || !this.track) return;
+    const { offset } = suggestClockOffset(c, map, r.cls.competitors[r.runner], start, this.track);
+    this.results = { ...r, clockOffset: offset };
+  }
+
+  /** Number of course points that get a passing time from the punches. */
+  punchPassingCount(): number {
+    return this.punchOverrides()?.size ?? 0;
+  }
+
+  private punchOverrides(): Map<string, number> | null {
+    const r = this.results;
+    const c = this.course;
+    const map = this.resultMap;
+    const start = this.resultStartMs;
+    const tr = this.track;
+    if (!r || r.runner === null || !c || !map || start === null || !tr) return null;
+    const times = punchTimes(map, r.cls.competitors[r.runner], start, r.clockOffset);
+    const base = tr.startTime ?? 0;
+    const out = new Map<string, number>();
+    let last = -Infinity;
+    times.forEach((ms, k) => {
+      if (ms === null) return;
+      const t = (ms - base) / 1000;
+      if (t < 0 || t > tr.duration || t <= last) return;
+      last = t;
+      out.set(c.points[k].id, ms);
+    });
+    return out;
+  }
+
+  /** Uses the punch times as control passing times (manual overrides; undoable). */
+  applyPunchTimes(): number {
+    const o = this.punchOverrides();
+    if (!o?.size) return 0;
+    this.pushHistory();
+    this.passingOverrides = Object.fromEntries(o);
+    return o.size;
+  }
+
+  removeResults(): void {
+    this.results = null;
+    this.pendingResults = null;
+    this.resultsError = '';
   }
 
   // ---------------- Route choices (STORY-30) ----------------

@@ -21,6 +21,11 @@ away**, so that **I can compare the alternatives and then watch which one the ru
       so no route is cut off.
 - [ ] If a leg is shorter than display + fade time, the fade ends at the next transition.
 - [ ] Preview scrubbing shows exactly the same alpha as the export at any time.
+- [x] Display times can be given in **video seconds** (default) or **real seconds (1×)**, which follow the race clock and
+      therefore get shorter in the video at higher playback speeds.
+- [x] Route choices are kept in the leg framing **only while they are shown**; as they fade out, the camera eases to the
+      leg itself (GPX segment, start and target), over the fade-out or transition time, whichever is longer.
+      "Keep visible for the whole leg" keeps them framed.
 
 ## Dependencies
 [STORY-30](./STORY-30-draw-route-choices.md), [STORY-24](./STORY-24-leg-oriented-view.md), [EN-14](../enablers/EN-14-animation-timeline-camera.md)

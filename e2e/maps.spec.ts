@@ -46,6 +46,23 @@ test('adds a raster map with a world file in TM35FIN and lists it as a layer', a
   expect(a[5]).toBeCloseTo(CY + 512, 6);
 });
 
+test('places an already loaded image with a separate .wld world file', async ({ page }) => {
+  await page.getByTestId('load-sample').click();
+  await page.getByTestId('raster-input').setInputFiles([{ name: 'scan.png', mimeType: 'image/png', buffer: PNG }]);
+  await expect(page.getByTestId('georef-source')).toHaveText('Not georeferenced yet');
+  await expect(page.getByTestId('georef-panel')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  const wld = `2\n0\n0\n-2\n${CX - 512 + 1}\n${CY + 512 - 1}\n`;
+  await page
+    .getByTestId('world-file-input')
+    .setInputFiles([{ name: 'scan.wld', mimeType: 'text/plain', buffer: Buffer.from(wld) }]);
+  await expect(page.getByTestId('georef-source')).toHaveText('World file');
+  const g = await page.evaluate(() => (window as unknown as Win).__omv.app.raster!.georef);
+  expect(g.crs).toBe('EPSG:3067');
+  expect(g.affine[2]).toBeCloseTo(CX - 512, 6);
+  expect(g.affine[5]).toBeCloseTo(CY + 512, 6);
+});
+
 test('adds a KMZ map (GroundOverlay) and places it in TM35FIN', async ({ page }) => {
   const kml = `<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><GroundOverlay>
     <name>Keskuspuisto</name><Icon><href>files/map.png</href></Icon>

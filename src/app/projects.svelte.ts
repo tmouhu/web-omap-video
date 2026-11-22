@@ -53,6 +53,7 @@ export function startAutosave(delayMs = 1000): () => void {
         app.routes,
         app.passingOverrides,
         app.matchRadius,
+        app.results,
         app.projectName,
         app.settings(),
       ];

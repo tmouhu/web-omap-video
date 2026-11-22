@@ -5,11 +5,13 @@
  * - COURSE MODE (EPIC-4): leg-oriented camera from `CourseCamera`, plus route-choice visibility (STORY-31).
  */
 import { forward, gridConvergence, pointScale } from '../geo/crs';
-import { groundResolutionForScale, normalizeAngle, toRad, type LatLon } from '../geo/geo';
+import { angleDiff, groundResolutionForScale, normalizeAngle, toRad, type LatLon } from '../geo/geo';
 import type { Course } from '../course/course';
 import type { Passing } from '../course/match';
 import type { Track, TrackPoint } from '../track/track';
-import { CourseCamera, type CourseCameraSettings } from './courseCamera';
+import { CourseCamera, routeAlpha, type CourseCameraSettings } from './courseCamera';
+
+export { routeAlpha };
 
 export interface ViewState {
   /** Centre in view-CRS coordinates. */
@@ -26,9 +28,19 @@ export interface FreeModeSettings {
   headingUp: boolean;
   /** Runner sits this fraction of the frame height below the centre (0 = centred). */
   lookAhead: number;
+  /** Heading-up: direction changes smaller than this (degrees) do not turn the map (0 = off). */
+  rotationDeadband: number;
+  /** Heading-up: time constant of the map rotation smoothing, in VIDEO seconds (0 = off). */
+  rotationSmoothing: number;
 }
 
-export const DEFAULT_FREE_MODE: FreeModeSettings = { scale: 10000, headingUp: true, lookAhead: 0.2 };
+export const DEFAULT_FREE_MODE: FreeModeSettings = {
+  scale: 10000,
+  headingUp: true,
+  lookAhead: 0.2,
+  rotationDeadband: 20,
+  rotationSmoothing: 1.5,
+};
 
 /** When route choices of a leg are shown (STORY-31). Durations in video seconds. */
 export interface RouteDisplaySettings {
@@ -40,6 +52,8 @@ export interface RouteDisplaySettings {
   fadeOut: number;
   /** Keep visible for the whole leg (no fade-out until the leg ends). */
   wholeLeg: boolean;
+  /** Units of fadeIn/hold/fadeOut: seconds of the video, or real (1×, track) seconds. */
+  timeBase: 'video' | 'real';
 }
 
 export const DEFAULT_ROUTE_DISPLAY: RouteDisplaySettings = {
@@ -48,6 +62,7 @@ export const DEFAULT_ROUTE_DISPLAY: RouteDisplaySettings = {
   hold: 6,
   fadeOut: 1,
   wholeLeg: false,
+  timeBase: 'video',
 };
 
 export interface CourseModeInput {
@@ -90,9 +105,23 @@ export class Timeline {
     readonly crsCode: string,
     readonly settings: FreeModeSettings,
     readonly courseMode: CourseModeInput | null = null,
+    /** "North-up" rotation (OL radians): the orienteering map's north when a raster map is loaded, else 0. */
+    readonly northRotation = 0,
+    /** Track seconds per video second (free-mode rotation smoothing is in video seconds). */
+    readonly speed = 1,
   ) {
     // Resolution fixed per track (scale factor at the track centre) so the scale never wobbles.
     this.resolution = resolutionForScale(settings.scale, crsCode, track);
+  }
+
+  private bearings: BearingSeries | null = null;
+
+  /** Free-mode heading-up camera bearing (grid degrees); the raw grid heading when smoothing is off. */
+  cameraBearing(t: number, gridHeading: number): number {
+    const s = this.settings;
+    if (!(s.rotationDeadband > 0) && !(s.rotationSmoothing > 0)) return gridHeading;
+    this.bearings ??= new BearingSeries(this.track, this.crsCode, s, this.speed);
+    return this.bearings.at(t);
   }
 
   get isCourseMode(): boolean {
@@ -115,6 +144,8 @@ export class Timeline {
         speed: cm.speed,
         frame,
         legExtras: cm.legExtras,
+        northRotation: this.northRotation,
+        routeDisplay: cm.routes,
       });
       this.cameras.set(key, cam);
     }
@@ -132,7 +163,7 @@ export class Timeline {
       const s = cam.viewAt(t);
       const cm = this.courseMode;
       const legStart = cm.passings[s.legIndex].t;
-      const shownAt = s.legIndex === 0 ? legStart : cm.routes.appear === 'transition' ? s.legShownAt : s.legSettledAt;
+      const shownAt = cam.routeShownAt(s.legIndex);
       return {
         ...base,
         view: s.view,
@@ -142,9 +173,8 @@ export class Timeline {
       };
     }
 
-    const up = this.settings.headingUp ? gridHeading : 0;
+    const a = this.settings.headingUp ? toRad(this.cameraBearing(t, gridHeading)) : -this.northRotation;
     const off = this.settings.lookAhead * frame.height * this.resolution;
-    const a = toRad(up);
     return {
       ...base,
       view: {
@@ -159,17 +189,69 @@ export class Timeline {
   }
 }
 
-/** Route-choice opacity: fade in at `start`, hold, fade out; never past the end of the leg. */
-export function routeAlpha(t: number, start: number, legEnd: number, r: RouteDisplaySettings, speed: number): number {
-  if (!Number.isFinite(start) || t < start || t >= legEnd) return 0;
-  const fi = Math.max(1e-6, r.fadeIn * speed);
-  const x = t - start;
-  if (x < fi) return x / fi;
-  if (r.wholeLeg) return 1;
-  const hold = r.hold * speed;
-  if (x < fi + hold) return 1;
-  const fo = Math.max(1e-6, r.fadeOut * speed);
-  return Math.max(0, 1 - (x - fi - hold) / fo);
+/**
+ * Free-mode camera bearing (STORY-5): the travel direction with a dead band and time smoothing, so small
+ * changes in the trend do not turn the map and turns are eased – calmer at high playback speed, since the
+ * smoothing is in video seconds. Precomputed over the whole track in one forward pass (dead band with a
+ * "settle" rule so a sustained small offset is eventually followed) plus zero-phase smoothing: a pure function
+ * of the track and settings, identical in preview and export.
+ */
+class BearingSeries {
+  readonly step: number;
+  readonly values: Float64Array;
+
+  constructor(track: Track, crsCode: string, s: FreeModeSettings, speed: number) {
+    const dur = track.duration;
+    this.step = Math.max(0.25, dur / 40000);
+    const n = Math.max(2, Math.ceil(dur / this.step) + 1);
+    const conv = gridConvergence(crsCode, track.center());
+    const v = new Float64Array(n);
+    // Unwrapped grid heading.
+    let prev = track.headingAt(0) + conv;
+    for (let i = 0; i < n; i++) {
+      prev += angleDiff(prev, track.headingAt(i * this.step) + conv);
+      v[i] = prev;
+    }
+    // Dead band: hold the camera bearing until the heading leaves the band, or stays off by more than half of
+    // it for a while (then follow it, so long gentle bends are not ignored for good).
+    const dead = Math.max(0, s.rotationDeadband);
+    if (dead > 0) {
+      const settle = Math.max(1, s.rotationSmoothing) * 1.5 * speed;
+      let target = v[0];
+      let off = 0;
+      for (let i = 0; i < n; i++) {
+        const d = Math.abs(v[i] - target);
+        if (d > dead) {
+          target = v[i];
+          off = 0;
+        } else if (d > dead / 2) {
+          off += this.step;
+          if (off >= settle) {
+            target = v[i];
+            off = 0;
+          }
+        } else off = 0;
+        v[i] = target;
+      }
+    }
+    // Zero-phase exponential smoothing, two passes each way (smooth start and stop of the turns).
+    const tau = Math.max(0, s.rotationSmoothing) * speed;
+    if (tau > 0) {
+      const a = 1 - Math.exp(-this.step / tau);
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 1; i < n; i++) v[i] = v[i - 1] + (v[i] - v[i - 1]) * a;
+        for (let i = n - 2; i >= 0; i--) v[i] = v[i + 1] + (v[i] - v[i + 1]) * a;
+      }
+    }
+    this.values = v;
+  }
+
+  at(t: number): number {
+    const x = Math.max(0, t) / this.step;
+    const i = Math.min(Math.floor(x), this.values.length - 2);
+    const f = Math.min(1, x - i);
+    return normalizeAngle(this.values[i] + (this.values[i + 1] - this.values[i]) * f);
+  }
 }
 
 /** View-CRS units per CSS px that show `scale` (1:scale at 96 CSS px/inch) at the track centre. */

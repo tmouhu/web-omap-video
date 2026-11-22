@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { forward } from '../src/lib/geo/crs';
 import { apply } from '../src/lib/raster/affine';
-import { georefFromCorners, placedGeoref, rasterCenter, rasterExtent, viewAffine } from '../src/lib/raster/rasterMap';
+import {
+  georefFromCorners,
+  placedGeoref,
+  rasterCenter,
+  rasterExtent,
+  rasterNorthRotation,
+  viewAffine,
+} from '../src/lib/raster/rasterMap';
 
 const r = {
   width: 4000,
@@ -51,5 +58,52 @@ describe('raster georeference', () => {
     const got = apply(g.affine, [0, 0]);
     // A lon/lat box is not exactly an affine in TM35: a few metres of residual over 11 km is expected.
     expect(Math.hypot(got[0] - tl[0], got[1] - tl[1])).toBeLessThan(25);
+  });
+});
+
+describe('map north (raster up)', () => {
+  /** Raster rotated so its up points `deg` clockwise from grid north (0.5 m pixels). */
+  const rotated = (deg: number) => {
+    const a = (deg * Math.PI) / 180;
+    // Column → right of "up", row → down: up = (sin a, cos a), right = (cos a, −sin a).
+    const affine: [number, number, number, number, number, number] = [
+      0.5 * Math.cos(a),
+      -0.5 * Math.sin(a),
+      385000,
+      -0.5 * Math.sin(a),
+      -0.5 * Math.cos(a),
+      6676000,
+    ];
+    return { ...r, georef: { ...r.georef, affine } };
+  };
+
+  it('grid-north-up raster → no rotation', () => {
+    expect(rasterNorthRotation(r, 'EPSG:3067')).toBe(0);
+  });
+
+  it('rotated raster → view rotation = −(bearing of image up)', () => {
+    expect(rasterNorthRotation(rotated(8), 'EPSG:3067')).toBeCloseTo((-8 * Math.PI) / 180, 9);
+    expect(rasterNorthRotation(rotated(-12), 'EPSG:3067')).toBeCloseTo((12 * Math.PI) / 180, 9);
+  });
+
+  it('a real world file (h1.jgw: about 10° east of grid north)', () => {
+    const h1 = {
+      width: 2259,
+      height: 3235,
+      georef: {
+        crs: 'EPSG:3067',
+        affine: [
+          1.2507058463255043,
+          -0.2205331856370015,
+          367620.5150863303570077 - 0.5 * 1.2507058463255043 + 0.5 * 0.2205331856370015,
+          -0.2205331856370015,
+          -1.2507058463255043,
+          6694703.2643804838880897 + 0.5 * 0.2205331856370015 + 0.5 * 1.2507058463255043,
+        ] as [number, number, number, number, number, number],
+        source: 'world-file' as const,
+      },
+    };
+    const deg = (-rasterNorthRotation(h1, 'EPSG:3067') * 180) / Math.PI;
+    expect(deg).toBeCloseTo(10, 0);
   });
 });

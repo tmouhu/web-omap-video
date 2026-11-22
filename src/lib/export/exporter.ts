@@ -29,7 +29,7 @@ import type { RasterMap } from '../raster/rasterMap';
 import { drawScene } from '../render/scene';
 import { sceneForFrame, type ProjectScene } from '../render/frameScene';
 import { frameCount } from './videoSize';
-import { drawComponent, type ComponentConfig, type ComponentKind } from '../components/components';
+import { drawComponent, type ComponentConfig, type ComponentKind, type SplitEvent } from '../components/components';
 
 export interface ExportOptions {
   timeline: Timeline;
@@ -164,6 +164,8 @@ export interface PackageOptions extends Omit<ExportOptions, 'width' | 'height' |
   /** Origin for elapsed time/distance components and the course passing times. */
   origin: number;
   passings: number[] | null;
+  /** Split comparison events for the splits component (STORY-41). */
+  splits?: SplitEvent[] | null;
 }
 
 export interface PackageResult {
@@ -246,6 +248,8 @@ export async function exportPackage(o: PackageOptions): Promise<PackageResult> {
         origin: o.origin,
         passings: o.passings,
         locale: o.scene.videoLocale,
+        speed: o.speed,
+        splits: o.splits ?? null,
       };
       for (const l of lanes) {
         if (l.spec.kind === 'map') {

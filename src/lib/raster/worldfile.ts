@@ -5,7 +5,22 @@ import { utmCrs } from '../geo/crs';
 import type { LatLon } from '../geo/geo';
 import { apply, type Affine } from './affine';
 
-export const WORLD_FILE_EXT = /\.(jgw|jpgw|jpegw|pgw|pngw|tfw|tifw|tiffw|gfw|gifw|wld|bpw|wfw)$/i;
+export const WORLD_FILE_EXTS = [
+  'jgw',
+  'jpgw',
+  'jpegw',
+  'pgw',
+  'pngw',
+  'tfw',
+  'tifw',
+  'tiffw',
+  'gfw',
+  'gifw',
+  'wld',
+  'bpw',
+  'wfw',
+];
+export const WORLD_FILE_EXT = new RegExp(`\\.(${WORLD_FILE_EXTS.join('|')})$`, 'i');
 
 /**
  * Parses the six world-file lines A, D, B, E, C, F (C, F = centre of the top-left pixel)

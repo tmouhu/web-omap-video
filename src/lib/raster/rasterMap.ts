@@ -70,6 +70,17 @@ export function viewAffine(r: Pick<RasterMap, 'width' | 'height' | 'georef'>, vi
   return fitTransform(px, world, affine).affine;
 }
 
+/**
+ * View rotation (OpenLayers radians, positive = clockwise) that puts the raster's "up" (its map north, e.g.
+ * magnetic north lines) straight up on screen. 0 for a raster drawn grid-north-up in the view CRS.
+ */
+export function rasterNorthRotation(r: Pick<RasterMap, 'width' | 'height' | 'georef'>, viewCrs: string): number {
+  const [, b, , , e] = viewAffine(r, viewCrs);
+  // Image up (−row) as a grid bearing; heading-up convention: rotation = −bearing.
+  const bearing = Math.atan2(-b, -e);
+  return Math.abs(bearing) < 1e-9 ? 0 : -bearing;
+}
+
 /** Geographic centre of the raster. */
 export function rasterCenter(r: Pick<RasterMap, 'width' | 'height' | 'georef'>): LatLon {
   return inverse(r.georef.crs, apply(r.georef.affine, [r.width / 2, r.height / 2]));

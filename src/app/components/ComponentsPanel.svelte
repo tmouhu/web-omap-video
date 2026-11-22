@@ -14,11 +14,13 @@
     const t = app.time;
     const passings = app.passings?.map((p) => p.t) ?? null;
     void app.videoLocale;
+    const splits = app.splitEvents;
+    const speed = app.speed;
     const cfgs = $state.snapshot(app.components) as ComponentConfig[];
     if (!track || !r) return;
     for (const cfg of cfgs) {
       const c = canvases[cfg.kind];
-      if (!c || !cfg.enabled || !isAvailable(cfg.kind, track)) continue;
+      if (!c || !cfg.enabled || !isAvailable(cfg.kind, track, !!splits?.length)) continue;
       c.width = cfg.width;
       c.height = cfg.height;
       drawComponent(c.getContext('2d')!, cfg, {
@@ -29,6 +31,8 @@
         origin: r.origin,
         passings,
         locale: app.videoLocale,
+        speed,
+        splits,
       });
     }
   });
@@ -56,7 +60,7 @@
     </select>
   </label>
   {#each app.components as c (c.kind)}
-    {@const available = isAvailable(c.kind, app.track)}
+    {@const available = isAvailable(c.kind, app.track, !!app.splitEvents?.length)}
     <div class="comp" class:on={c.enabled && available}>
       <label class="check head">
         <input
@@ -68,7 +72,13 @@
         <span class="name">{t(`comp.${c.kind}`)}</span>
         {#if !available}
           <span class="muted small">
-            {app.track ? (COMPONENT_META[c.kind].needs === 'heartRate' ? t('dv.noHr') : t('dv.noEle')) : ''}
+            {app.track
+              ? COMPONENT_META[c.kind].needs === 'heartRate'
+                ? t('dv.noHr')
+                : COMPONENT_META[c.kind].needs === 'results'
+                  ? t('dv.noResults')
+                  : t('dv.noEle')
+              : ''}
           </span>
         {/if}
       </label>
@@ -155,6 +165,32 @@
                     (c.options.beforeStart = (e.currentTarget as HTMLInputElement).checked ? 'countdown' : 'zero')}
                 />
                 {t('dv.countdown')}
+              </label>
+            {:else if c.kind === 'splits'}
+              <label class="field">
+                <span>{t('dv.splitShow', { s: c.options.splitShow })}</span>
+                <input type="range" min="1" max="20" step="0.5" bind:value={c.options.splitShow} />
+              </label>
+              <label class="field">
+                <span>{t('dv.splitShowFinish', { s: c.options.splitShowFinish })}</span>
+                <input type="range" min="1" max="30" step="0.5" bind:value={c.options.splitShowFinish} />
+              </label>
+              <label class="field">
+                <span>{t('dv.fadeIn', { s: c.options.splitFadeIn })}</span>
+                <input type="range" min="0" max="2" step="0.1" bind:value={c.options.splitFadeIn} />
+              </label>
+              <label class="field">
+                <span>{t('dv.fadeOut', { s: c.options.splitFadeOut })}</span>
+                <input type="range" min="0" max="3" step="0.1" bind:value={c.options.splitFadeOut} />
+              </label>
+              <label class="field">
+                <span>{t('dv.keyColor')}</span>
+                <input type="color" bind:value={c.options.keyColor} data-testid="splits-key-color" />
+                <small class="muted">{t('dv.keyColorHelp')}</small>
+              </label>
+              <label class="check">
+                <input type="checkbox" bind:checked={c.options.showRank} />
+                {t('dv.showRank')}
               </label>
             {:else if c.kind === 'distance'}
               <label class="check">

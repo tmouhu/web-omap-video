@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '../i18n.svelte';
+  import { dist, t } from '../i18n.svelte';
   /** Camera (free mode / leg-by-leg course mode, STORY-24..27) and runner + tail style (STORY-28/29). */
   import { app, SCALE_PRESETS } from '../state.svelte';
   import { courseProblems } from '../../lib/course/course';
@@ -94,11 +94,71 @@
         </select>
       </label>
     {/if}
-    <label class="check">
-      <input type="checkbox" bind:checked={cam.approachEnabled} disabled={app.locked} data-testid="approach" />
-      {t('cam.approach')}
-    </label>
-    {#if cam.approachEnabled}
+    <div class="field">
+      <span>{t('cam.legZoom')}</span>
+      <div class="seg" role="group" aria-label={t('cam.legZoom')}>
+        <button
+          aria-pressed={cam.legZoom !== 'target'}
+          disabled={app.locked}
+          onclick={() => (cam.legZoom = 'whole')}
+          data-testid="leg-zoom-whole"
+        >
+          {t('cam.legZoomWhole')}
+        </button>
+        <button
+          aria-pressed={cam.legZoom === 'target'}
+          disabled={app.locked}
+          onclick={() => (cam.legZoom = 'target')}
+          data-testid="leg-zoom-target"
+        >
+          {t('cam.legZoomTarget')}
+        </button>
+      </div>
+    </div>
+    {#if cam.legZoom === 'target'}
+      <small class="muted">{t('cam.legZoomHelp')}</small>
+      <div class="grid2">
+        <label class="field">
+          <span>{t('cam.legZoomStop')}</span>
+          <div class="scale">
+            <span class="mono muted">1:</span>
+            <input
+              type="number"
+              min="500"
+              step="500"
+              value={cam.legZoomStopScale}
+              disabled={app.locked}
+              data-testid="leg-zoom-stop"
+              onchange={(e) => scaleInput(e, (v) => (cam.legZoomStopScale = v))}
+            />
+          </div>
+        </label>
+        <label class="field">
+          <span>
+            {t('cam.legZoomStart', {
+              value:
+                cam.legZoomStartDistance > 0
+                  ? t('cam.legZoomLast', { dist: dist(cam.legZoomStartDistance) })
+                  : t('cam.legZoomFromStart'),
+            })}
+          </span>
+          <input
+            type="range"
+            min="0"
+            max="1500"
+            step="50"
+            bind:value={cam.legZoomStartDistance}
+            disabled={app.locked}
+          />
+        </label>
+      </div>
+    {:else}
+      <label class="check">
+        <input type="checkbox" bind:checked={cam.approachEnabled} disabled={app.locked} data-testid="approach" />
+        {t('cam.approach')}
+      </label>
+    {/if}
+    {#if cam.approachEnabled && cam.legZoom !== 'target'}
       <div class="grid2">
         <label class="field">
           <span>{t('cam.approachStarts', { s: cam.approachSeconds })}</span>
@@ -166,6 +226,33 @@
       <input type="checkbox" bind:checked={app.free.headingUp} disabled={app.locked} />
       {t('cam.headingUp')}
     </label>
+    {#if app.free.headingUp}
+      <label class="field">
+        <span>{t('cam.rotationDeadband', { deg: app.free.rotationDeadband })}</span>
+        <input
+          type="range"
+          min="0"
+          max="45"
+          step="1"
+          bind:value={app.free.rotationDeadband}
+          disabled={app.locked}
+          data-testid="rotation-deadband"
+        />
+      </label>
+      <label class="field">
+        <span>{t('cam.rotationSmoothing', { s: app.free.rotationSmoothing.toFixed(1) })}</span>
+        <input
+          type="range"
+          min="0"
+          max="5"
+          step="0.1"
+          bind:value={app.free.rotationSmoothing}
+          disabled={app.locked}
+          data-testid="rotation-smoothing"
+        />
+      </label>
+      <small class="muted">{t('cam.rotationHelp')}</small>
+    {/if}
     <label class="field">
       <span>{t('cam.lookAhead', { pct: Math.round(app.free.lookAhead * 100) })}</span>
       <input type="range" min="0" max="0.4" step="0.05" bind:value={app.free.lookAhead} disabled={app.locked} />

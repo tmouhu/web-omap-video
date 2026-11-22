@@ -89,6 +89,8 @@ Everything under **Open questions / refinement** is still to be decided.
 | [STORY-38](./stories/STORY-38-save-open-project.md) | 6 | Save and open projects | Must | EN-15 |
 | [STORY-39](./stories/STORY-39-animation-settings-and-presets.md) | 6 | Animation and style settings with presets | Must | EN-15, STORY-37 |
 | [STORY-40](./stories/STORY-40-localisation-and-units.md) | 6 | Localisation (FI/EN) and number formats | Could | EN-16 |
+| [STORY-41](./stories/STORY-41-import-results-split-comparison.md) | 5 | Import results (IOF XML 2.0/3.0): leg sync and split comparison component | Should | STORY-22, STORY-23, STORY-32 |
+| [STORY-42](./stories/STORY-42-progressive-leg-zoom.md) | 4 | Progressive leg zoom towards the target | Should | STORY-24, STORY-26, STORY-27 |
 
 ### Enablers
 | ID | Epic | Title | Prio |
@@ -176,7 +178,7 @@ graph LR
 | **R0 – Foundation** | Decisions made, architecture in place | EN-7, EN-8, EN-19 (starts at once), EN-1, EN-12, **EN-2 ADR**, EN-3, EN-13, EN-4, EN-14, **EN-10 spike**, EN-15, EN-16 |
 | **R1 – Course map video (internal)** | First end-to-end course-mode video on a real orienteering map | STORY-2, 3, 1, 6, 7, 8, 13, 15, 16, 18, 19, 22, 23, 24, 25, 26, 28, 29, 9, 11, 37, 38, EN-6, EN-18 |
 | **R2 – Public release** | All requirements in this backlog's Must scope | STORY-14, 21, 30, 31, 27, 32, 33, 34, 35, 36, 39, 10, 17, EN-9, STORY-12, STORY-4/5 (free mode polish) |
-| **R3 – Extensions** | Nice-to-haves | STORY-20, 40, EN-11, EN-5 (fallback only if needed), FIT import, DEM elevation |
+| **R3 – Extensions** | Nice-to-haves | STORY-20, 40, 41, EN-11, EN-5 (fallback only if needed), FIT import, DEM elevation |
 
 The EN-10 export spike and the EN-2 OpenLayers performance gate should be done **first**. Their results can change the scope and size of
 many stories.

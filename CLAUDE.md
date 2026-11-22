@@ -12,6 +12,10 @@ Architecture details: `docs/ARCHITECTURE.md`. POC this grew from: `../web-omap-p
 - `npm run check` – svelte-check (TS strict). `npm run build` = check + vite build
 - `npm run format` – Prettier (single quotes, width 120)
 Run `npm test && npm run check && npm run test:e2e` before reporting work as done.
+- Deploy: `.github/workflows/deploy-pages.yml` publishes to GitHub Pages on every push to `main` (unit tests +
+  build). Pages serves under `/<repo>/`: the build reads `BASE_PATH` (vite.config.ts), so public files must be
+  referenced via `import.meta.env.BASE_URL`, never `/file`. Local check: Browser pane → `pages-preview` (run
+  `BASE_PATH=/web-omap-video npm run build` first, open `/web-omap-video/`).
 
 ## Product decisions (do not re-litigate; see plan/README.md)
 - Rendering: **OpenLayers** (performance gate in EN-2). UI: **Svelte 5 runes**. Desktop first.
@@ -44,6 +48,9 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
 - `src/lib/components/components.ts` – data component videos (elevation, pace, HR, time, distance).
 - `src/lib/course/` – `course.ts` (model, legs, labels, edit helpers), `match.ts` (GPX↔course DP matching),
   `iofxml.ts` (IOF XML 3.0 CourseData), `routes.ts` (route choices per leg, by point ids). `src/lib/render/overprint.ts` – IOF course symbols (ISOM mm × px/mm).
+- `src/lib/results/` – `results.ts` (IOF XML 2.0.3/3.0 ResultList → `ResultClass`, `ResultsDoc` stored in the project),
+  `splits.ts` (difference to lead, course↔result mapping, punch times, clock offset), `navisport.ts` (public Navisport API,
+  CORS open). `ResultsPanel` in the course step; the `splits` component shows a key colour while hidden.
 - `src/lib/gpx/edits.ts` (non-destructive `GpxEdit` list, spikes), `write.ts` (GPX writer).
 - `src/app/mapTools.ts` – course / GPX / pick-passing tools (OL Pointer interaction + clicks) and preview-only marks.
 - `src/lib/project/` – `project.ts` (versioned ProjectDoc, `migrate`, `.omvproj` zip), `storage.ts` (IndexedDB library),
@@ -67,6 +74,9 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
   to only one of them.
 - OL rotation convention: radians, positive = clockwise map rotation; heading-up ⇒ `rotation = -heading`.
   Grid heading = true heading + `gridConvergence(crs, p)`.
+- "North-up" means **map north**: `app.mapNorth` (`rasterNorthRotation`: the raster image's up) when a raster map is
+  loaded, else grid north (0). Used by the raster/track fit, paused/editing views, free mode without heading-up and the
+  course overview (`Timeline`/`CourseCamera` `northRotation`). Never hard-code `setRotation(0)`.
 - Sizes in `drawScene` are CSS px × `pixelRatio` so preview and any video resolution look the same.
 - Exports always stream to a file (`openExportTarget`): never build whole videos in memory (2 GB Blob limit hit at
   10 min 1080p).

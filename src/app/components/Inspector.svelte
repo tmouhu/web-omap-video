@@ -9,6 +9,7 @@
   import GpxPanel from './GpxPanel.svelte';
   import MapPanel from './MapPanel.svelte';
   import PresetsPanel from './PresetsPanel.svelte';
+  import ResultsPanel from './ResultsPanel.svelte';
   import RoutePanel from './RoutePanel.svelte';
 </script>
 
@@ -17,6 +18,7 @@
     <MapPanel />
   {:else if app.inspectorTab === 'course'}
     <CoursePanel />
+    <ResultsPanel />
   {:else if app.inspectorTab === 'gpx'}
     <GpxPanel />
   {:else if app.inspectorTab === 'routes'}

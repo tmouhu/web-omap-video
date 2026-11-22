@@ -4,6 +4,7 @@
   import { app } from '../state.svelte';
   import { courseLength, courseProblems, legs, pointLabel } from '../../lib/course/course';
   import { writeIofCourseData } from '../../lib/course/iofxml';
+  import { isResultListXml } from '../../lib/results/results';
   import { formatDuration } from '../../lib/format';
   import type { PassingStatus } from '../../lib/course/match';
 
@@ -25,7 +26,8 @@
     const input = e.currentTarget as HTMLInputElement;
     const f = input.files?.[0];
     input.value = '';
-    if (f) f.text().then((t) => app.importCourseXml(t));
+    if (f)
+      f.text().then((text) => (isResultListXml(text) ? app.importResultsXml(text, f.name) : app.importCourseXml(text)));
   }
 
   function exportXml() {
