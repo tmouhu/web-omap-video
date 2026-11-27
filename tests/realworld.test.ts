@@ -4,7 +4,7 @@
  * Validates the track model and world-file handling against real data (EN-4, STORY-13).
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { angleDiff } from '../src/lib/geo/geo';
 import { parseGpx } from '../src/lib/gpx/gpx';
 import { findOutliers } from '../src/lib/gpx/edits';
@@ -16,8 +16,13 @@ const GPX = 'tests/resources/haukkaroga.gpx';
 const JGW = 'tests/resources/h1.jgw';
 
 describe.skipIf(!existsSync(GPX))('real GPX (haukkaroga)', () => {
-  const g = parseGpx(readFileSync(GPX, 'utf8'));
-  const t = new Track(g.name, g.points);
+  // Read in beforeAll: the describe body runs even when skipped (the data is not in the repo).
+  let g!: ReturnType<typeof parseGpx>;
+  let t!: Track;
+  beforeAll(() => {
+    g = parseGpx(readFileSync(GPX, 'utf8'));
+    t = new Track(g.name, g.points);
+  });
 
   it('parses all channels and builds a plausible track', () => {
     expect(t.channels).toEqual({ time: true, elevation: true, heartRate: true, cadence: true });

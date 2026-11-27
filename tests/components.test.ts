@@ -67,6 +67,18 @@ describe('component values', () => {
     expect(isAvailable('pace', plain)).toBe(true);
     expect(defaultComponents().every((c) => !c.enabled)).toBe(true);
   });
+
+  it('titles are off by default on the single-value components', () => {
+    const label = Object.fromEntries(defaultComponents().map((c) => [c.kind, c.style.showLabel]));
+    expect(label).toEqual({
+      elevation: true,
+      pace: false,
+      heartRate: false,
+      time: false,
+      distance: false,
+      splits: true,
+    });
+  });
 });
 
 describe('export range (STORY-35)', () => {

@@ -87,13 +87,18 @@ export const DEFAULT_COMPONENT_OPTIONS: ComponentOptions = {
   showRank: true,
 };
 
+/** Components showing one value (with an optional title and sub-information line). */
+const NUMERIC_KINDS: ComponentKind[] = ['pace', 'heartRate', 'time', 'distance'];
+
 export function defaultComponents(): ComponentConfig[] {
   return (Object.keys(COMPONENT_META) as ComponentKind[]).map((kind) => ({
     kind,
     enabled: false,
     width: COMPONENT_META[kind].size[0],
     height: COMPONENT_META[kind].size[1],
-    style: { ...DEFAULT_COMPONENT_STYLE },
+    // Titles off by default on the single-value components (pace, HR, time, distance). On the elevation profile and
+    // the splits card the same setting also shows the current elevation and the column titles, so it stays on.
+    style: { ...DEFAULT_COMPONENT_STYLE, showLabel: !NUMERIC_KINDS.includes(kind) },
     options: { ...DEFAULT_COMPONENT_OPTIONS, hrZones: [...DEFAULT_COMPONENT_OPTIONS.hrZones] },
   }));
 }
@@ -296,29 +301,55 @@ function numeric(
     icon(x + size / 2, h / 2, size);
     x += size + pad * 0.8;
   }
-  const hasLabel = s.showLabel && label;
-  const valueSize = h * (hasLabel ? 0.42 : 0.52);
+  // Left-aligned text stack, centred vertically: [label] / value + unit / [sub-information].
+  const hasLabel = !!(s.showLabel && label);
+  const valueSize = h * (hasLabel ? (sub ? 0.36 : 0.42) : sub ? 0.46 : 0.52);
+  const labelSize = h * 0.14;
+  const subSize = h * 0.15;
+  const CAP = 0.72; // cap height of the font (digits, capitals) as a fraction of the size
+  const gap = h * 0.08;
+  const lines: { size: number; draw: (baseline: number) => void }[] = [];
+  if (hasLabel) {
+    lines.push({
+      size: labelSize,
+      draw: (y) => {
+        ctx.font = `600 ${labelSize}px ${FONT}`;
+        ctx.fillStyle = s.muted;
+        ctx.fillText(label.toUpperCase(), x, y);
+      },
+    });
+  }
+  lines.push({
+    size: valueSize,
+    draw: (y) => {
+      ctx.font = `700 ${valueSize}px ${FONT}`;
+      ctx.fillStyle = valueColor;
+      const vw = fillTabular(ctx, value, x, y);
+      if (unit) {
+        ctx.font = `600 ${valueSize * 0.42}px ${FONT}`;
+        ctx.fillStyle = s.muted;
+        ctx.fillText(unit, x + vw + h * 0.05, y);
+      }
+    },
+  });
+  if (sub) {
+    lines.push({
+      size: subSize,
+      draw: (y) => {
+        ctx.font = `600 ${subSize}px ${FONT}`;
+        ctx.fillStyle = s.muted;
+        ctx.fillText(sub, x, y);
+      },
+    });
+  }
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
-  if (hasLabel) {
-    ctx.font = `600 ${h * 0.15}px ${FONT}`;
-    ctx.fillStyle = s.muted;
-    ctx.fillText(label.toUpperCase(), x, pad + h * 0.14);
-  }
-  ctx.font = `700 ${valueSize}px ${FONT}`;
-  ctx.fillStyle = valueColor;
-  const vy = hasLabel ? h - pad - (sub ? h * 0.12 : 0) : h / 2 + valueSize * 0.36;
-  const vw = fillTabular(ctx, value, x, vy);
-  if (unit) {
-    ctx.font = `600 ${valueSize * 0.42}px ${FONT}`;
-    ctx.fillStyle = s.muted;
-    ctx.fillText(unit, x + vw + h * 0.05, vy);
-  }
-  if (sub) {
-    ctx.font = `600 ${h * 0.12}px ${FONT}`;
-    ctx.fillStyle = s.muted;
-    ctx.textAlign = 'right';
-    ctx.fillText(sub, w - pad, vy);
+  const total = lines.reduce((a, l) => a + l.size * CAP, 0) + gap * (lines.length - 1);
+  let y = (h - total) / 2;
+  for (const l of lines) {
+    y += l.size * CAP;
+    l.draw(y);
+    y += gap;
   }
 }
 
