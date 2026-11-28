@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-3](../EPIC-3-course-and-gpx.md) · **Priority:** Must · **Labels:** `course`, `rendering`, `orienteering`
 
 ## User story
+
 As an **orienteer**, I want **the course drawn exactly as on a printed orienteering map**, and I want to **show or hide it**,
 so that **the video looks familiar and professional**.
 
 ## Acceptance criteria
+
 - [ ] Symbols per the IOF course overprint specification (ISOM 2017-2, section "Course planning symbols"; ISSprOM 2019-2
       for sprint maps):
   - **Start**: equilateral triangle pointing towards control 1
@@ -16,8 +18,8 @@ so that **the video looks familiar and professional**.
   - **Finish**: two concentric circles
 - [ ] Dimensions are defined **in map millimetres at the map's print scale** and verified against the standard
       (forest ISOM reference values: start triangle 6.0 mm side, control circle 5.0 mm diameter, finish circles 5.0 and 7.0 mm,
-      line width 0.35 mm, number height 4.0 mm – *to verify*). There is an ISOM / ISSprOM switch.
-- [ ] Colour: IOF overprint purple (exact sRGB from the standard), drawn with *multiply* blending so map detail shows through.
+      line width 0.35 mm, number height 4.0 mm – _to verify_). There is an ISOM / ISSprOM switch.
+- [ ] Colour: IOF overprint purple (exact sRGB from the standard), drawn with _multiply_ blending so map detail shows through.
 - [ ] Without a raster map (no print scale), symbol size follows the current view scale with the 1:10 000 / 1:15 000 reference,
       clamped to a readable on-screen size. In the video, symbols keep a constant readable size during zoom transitions
       (setting: "Fixed screen size" / "Scale with map").
@@ -28,11 +30,14 @@ so that **the video looks familiar and professional**.
 - [ ] Visual regression test against a reference rendering ([EN-8](../enablers/EN-8-test-strategy.md)).
 
 ## Open questions / refinement
+
 - Leg line gaps: the standard leaves out legs where they would cover important detail. Do we need manual "line break"
   edits per leg (as in Purple Pen / OCAD)? Proposed: later.
 
 ## Dependencies
+
 [STORY-18](./STORY-18-set-course.md), [EN-2](../enablers/EN-2-canvas-map-renderer.md)
 
 ## Estimate
+
 TBD

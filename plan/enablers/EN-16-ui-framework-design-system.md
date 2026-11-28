@@ -3,10 +3,12 @@
 **Type:** Enabler (architecture) · **Epic:** [EPIC-6](../EPIC-6-ux-and-project.md) · **Priority:** Must · **Labels:** `tech`, `ui`
 
 ## Summary
+
 The production app has several editors (georeferencing, course, GPX, route choices), a timeline, layer and style panels,
 and an export dialog. The requirement is a **visually attractive, modern and well usable UI**, built **desktop-first**.
 
 ## Decision (refinement, Nov 2026): Svelte 5
+
 - **Svelte 5** (runes) + **SvelteKit in static/SPA mode** (`adapter-static`), or plain Vite + Svelte if routing is not needed.
 - Accessible headless primitives: **Bits UI** (with shadcn-svelte style components) or Melt UI. Icons: Lucide.
 - Styling: design tokens as CSS custom properties, Tailwind CSS optional (team choice).
@@ -14,6 +16,7 @@ and an export dialog. The requirement is a **visually attractive, modern and wel
   Svelte's reactivity, and the render loop reads project state directly, so the UI does not re-render on every frame.
 
 ## Scope / acceptance criteria
+
 - [ ] Project skeleton with Svelte 5, TypeScript strict, Vitest + `@testing-library/svelte`, Playwright ([EN-7](./EN-7-project-setup-ci.md)).
 - [ ] Design tokens: colour (light and **dark theme**, dark by default for a video tool), typography, spacing, radii, motion.
       The course overprint purple is reserved for the map and is not used as a UI accent.
@@ -28,7 +31,9 @@ and an export dialog. The requirement is a **visually attractive, modern and wel
 - [ ] Component catalogue (Storybook for Svelte or Histoire) with visual regression of key components.
 
 ## Dependencies
+
 [EN-7](./EN-7-project-setup-ci.md), [EN-19](./EN-19-ux-research-and-design.md) (visual design input)
 
 ## Estimate
+
 TBD

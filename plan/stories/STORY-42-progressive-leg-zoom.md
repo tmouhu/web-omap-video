@@ -4,11 +4,13 @@
 · **Status:** approved (Nov 2026), implemented
 
 ## User story
+
 As an **orienteer**, I want **the leg view to zoom in gradually towards the target control as I get closer to it**, while
 **the map always shows the route I still have to run**, so that **the end of the leg is shown in detail without losing the
 overview of what is left**.
 
 ## Background
+
 The current camera ([STORY-24](./STORY-24-leg-oriented-view.md)) fits the whole leg and keeps that scale until a short,
 time-triggered approach zoom just before the punch ([STORY-27](./STORY-27-approach-zoom.md)). On long legs the last few
 hundred metres are shown at the scale of the whole leg, and then the zoom happens late and quickly.
@@ -18,22 +20,24 @@ from the current position to the target (plus the target control). As that remai
 continuously.
 
 ## Acceptance criteria
+
 - [x] New leg-zoom setting in the camera options: **Whole leg** (current behaviour, default) / **Zoom in towards the
       target**. Saved in the project and in presets.
-- [x] With "Zoom in towards the target", the leg view at track time *t* is fitted to:
-  - the runner's GPX route **from the position at *t* to the target passing** (the route actually run, so detours and
+- [x] With "Zoom in towards the target", the leg view at track time _t_ is fitted to:
+  - the runner's GPX route **from the position at _t_ to the target passing** (the route actually run, so detours and
     route choices are included),
   - the target control (with its overprint symbol margin), and
-  - the runner's position at *t*.
+  - the runner's position at _t_.
 
   The leg orientation (start → target up) and the margins stay the same as in the leg view.
+
 - [x] The view only ever zooms **in** during a leg. If the remaining route extends sideways (e.g. a detour), the scale holds
       rather than zooming out again. The scale changes smoothly; there are no jumps when GPS points are noisy.
 - [x] The scale is clamped by the zoom-in limit and zoom-out limit ([STORY-26](./STORY-26-scale-limits-and-panning.md)).
       **Zoom-in stop** setting: zooming in stops at a set scale (default 1:5 000), or earlier at the zoom-in limit.
 - [x] **Start delay**: the zoom starts after a set share of the leg (default 0 % = from the leg start) or a set distance to
-      the target (e.g. the last 300 m). Before that the whole leg is framed as now. *Implemented as the distance only
-      ("last … m", 0 = from the leg start).*
+      the target (e.g. the last 300 m). Before that the whole leg is framed as now. _Implemented as the distance only
+      ("last … m", 0 = from the leg start)._
 - [x] Route choices ([STORY-31](./STORY-31-route-choice-display.md)) still take priority: while they are shown, the framing
       also includes them. The progressive zoom takes over as they fade out, using the same easing as the route framing.
 - [x] Works together with panning: if the remaining route does not fit at the zoom-out limit, the camera pans as it does now.
@@ -41,15 +45,17 @@ continuously.
       next leg's start view.
 - [x] When "Zoom in towards the target" is on, the fixed approach zoom ([STORY-27](./STORY-27-approach-zoom.md)) is not
       used (they would fight). The approach zoom settings are hidden.
-- [x] Pure function of (project, *t*): preview scrubbing and export give identical frames; unit tests check that the
-      remaining route, the target and the runner are inside the frame for sampled *t*, and that the scale is monotonic
+- [x] Pure function of (project, _t_): preview scrubbing and export give identical frames; unit tests check that the
+      remaining route, the target and the runner are inside the frame for sampled _t_, and that the scale is monotonic
       within a leg.
 
 ## Decisions (product owner, Nov 2026)
+
 All three proposals below were accepted: the route actually run, an option next to the approach zoom ("Whole leg" stays
 the default), and zoom in only.
 
 ## Open questions (resolved)
+
 1. Should the frame use the **route actually run** (GPX from now to the target passing, which "knows the future"), or the
    **straight line** from the runner to the target? Proposed: the route actually run. It shows the runner's choice,
    and the video is made after the race.
@@ -59,11 +65,13 @@ the default), and zoom in only.
    running past the control and coming back)? Proposed: zoom in only, and a looping route keeps the scale.
 
 ## Dependencies
+
 [STORY-24](./STORY-24-leg-oriented-view.md), [STORY-26](./STORY-26-scale-limits-and-panning.md),
 [STORY-27](./STORY-27-approach-zoom.md), [STORY-31](./STORY-31-route-choice-display.md),
 [EN-14](../enablers/EN-14-animation-timeline-camera.md)
 
 ## Implementation notes
+
 `CourseCamera.zoomSeries(li)` precomputes each leg (≤ 600 samples): suffix boxes of the remaining GPX + target in leg
 coordinates → fit; the scale follows the remaining distance log-linearly from the whole-leg fit (where the zoom
 starts) to the stop scale at the target, never tighter than the fit (fitting the remaining route alone reached the
@@ -72,4 +80,5 @@ smoothing in log space (≈ 1.5 video s; stays ≥ the fit so the content fits) 
 Where the remaining route does not fit at the zoom-out limit, the normal panning view is used.
 
 ## Estimate
+
 TBD

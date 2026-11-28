@@ -24,6 +24,7 @@ import {
 import type { Timeline } from '../anim/timeline';
 import { createOlLayer, type LayerDesc } from '../map/layerModel';
 import { composeOlCanvases } from '../map/compose';
+import { stableResolution } from '../map/stableZoom';
 import { registerProjections } from '../map/layers';
 import type { RasterMap } from '../raster/rasterMap';
 import { drawScene } from '../render/scene';
@@ -233,10 +234,12 @@ export async function exportPackage(o: PackageOptions): Promise<PackageResult> {
       if (o.signal?.aborted) throw new DOMException('Export cancelled', 'AbortError');
       const t = Math.min(o.endT, o.startT + (n * o.speed) / o.fps);
       const fs = o.timeline.frameStateAt(t, { width: o.cssWidth, height: o.cssHeight });
+      // Stable zoom: OL renders at a quantised resolution, the rest is one uniform scale (no tile shimmer).
+      const stable = stableResolution(fs.view.resolution);
       if (map) {
         const view = map.getView();
         view.setCenter(fs.view.center);
-        view.setResolution(fs.view.resolution);
+        view.setResolution(stable.resolution);
         view.setRotation(fs.view.rotation);
         await renderComplete(map, o.tileTimeoutMs ?? 15000);
       }
@@ -248,14 +251,14 @@ export async function exportPackage(o: PackageOptions): Promise<PackageResult> {
         origin: o.origin,
         passings: o.passings,
         locale: o.scene.videoLocale,
-        speed: o.speed,
+        timeScale: o.scene.timeScale ?? 1,
         splits: o.splits ?? null,
       };
       for (const l of lanes) {
         if (l.spec.kind === 'map') {
           l.ctx.fillStyle = '#ece8df';
           l.ctx.fillRect(0, 0, l.spec.width, l.spec.height);
-          composeOlCanvases(map!, l.ctx, pixelRatio);
+          composeOlCanvases(map!, l.ctx, pixelRatio, stable.scale);
           drawScene(l.ctx, l.spec.width, l.spec.height, pixelRatio, fs.view, sceneForFrame(fs, o.scene));
         } else if (l.spec.component) {
           drawComponent(l.ctx, l.spec.component, data);

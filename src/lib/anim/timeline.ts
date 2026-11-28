@@ -30,7 +30,7 @@ export interface FreeModeSettings {
   lookAhead: number;
   /** Heading-up: direction changes smaller than this (degrees) do not turn the map (0 = off). */
   rotationDeadband: number;
-  /** Heading-up: time constant of the map rotation smoothing, in VIDEO seconds (0 = off). */
+  /** Heading-up: time constant of the map rotation smoothing, in time-base seconds (STORY-47; 0 = off). */
   rotationSmoothing: number;
 }
 
@@ -42,7 +42,7 @@ export const DEFAULT_FREE_MODE: FreeModeSettings = {
   rotationSmoothing: 1.5,
 };
 
-/** When route choices of a leg are shown (STORY-31). Durations in video seconds. */
+/** When route choices of a leg are shown (STORY-31). Durations in time-base seconds (STORY-47). */
 export interface RouteDisplaySettings {
   /** Appear when the transition into the leg starts, or when it has finished. */
   appear: 'transition' | 'settled';
@@ -52,8 +52,6 @@ export interface RouteDisplaySettings {
   fadeOut: number;
   /** Keep visible for the whole leg (no fade-out until the leg ends). */
   wholeLeg: boolean;
-  /** Units of fadeIn/hold/fadeOut: seconds of the video, or real (1×, track) seconds. */
-  timeBase: 'video' | 'real';
 }
 
 export const DEFAULT_ROUTE_DISPLAY: RouteDisplaySettings = {
@@ -62,7 +60,6 @@ export const DEFAULT_ROUTE_DISPLAY: RouteDisplaySettings = {
   hold: 6,
   fadeOut: 1,
   wholeLeg: false,
-  timeBase: 'video',
 };
 
 export interface CourseModeInput {
@@ -70,8 +67,12 @@ export interface CourseModeInput {
   passings: Passing[];
   camera: CourseCameraSettings;
   routes: RouteDisplaySettings;
-  /** Track seconds per video second (durations in settings are video seconds). */
+  /** Track seconds per video second. */
   speed: number;
+  /** Track seconds per settings second (STORY-47 time base); defaults to `speed`. */
+  timeScale?: number;
+  /** Real-time transition clips (STORY-46): leg changes animated over this many track seconds. */
+  transitionOverride?: number;
   /** Points to keep in view per leg (route choices). */
   legExtras?: (legIndex: number) => LatLon[];
 }
@@ -107,8 +108,8 @@ export class Timeline {
     readonly courseMode: CourseModeInput | null = null,
     /** "North-up" rotation (OL radians): the orienteering map's north when a raster map is loaded, else 0. */
     readonly northRotation = 0,
-    /** Track seconds per video second (free-mode rotation smoothing is in video seconds). */
-    readonly speed = 1,
+    /** Track seconds per settings second (STORY-47): free-mode rotation smoothing is in time-base seconds. */
+    readonly timeScale = 1,
   ) {
     // Resolution fixed per track (scale factor at the track centre) so the scale never wobbles.
     this.resolution = resolutionForScale(settings.scale, crsCode, track);
@@ -120,7 +121,7 @@ export class Timeline {
   cameraBearing(t: number, gridHeading: number): number {
     const s = this.settings;
     if (!(s.rotationDeadband > 0) && !(s.rotationSmoothing > 0)) return gridHeading;
-    this.bearings ??= new BearingSeries(this.track, this.crsCode, s, this.speed);
+    this.bearings ??= new BearingSeries(this.track, this.crsCode, s, this.timeScale);
     return this.bearings.at(t);
   }
 
@@ -142,6 +143,8 @@ export class Timeline {
         passings: cm.passings,
         settings: cm.camera,
         speed: cm.speed,
+        timeScale: cm.timeScale,
+        transitionOverride: cm.transitionOverride,
         frame,
         legExtras: cm.legExtras,
         northRotation: this.northRotation,
@@ -169,7 +172,7 @@ export class Timeline {
         view: s.view,
         legIndex: s.legIndex,
         legStartT: legStart,
-        routeAlpha: routeAlpha(t, shownAt, s.legEndsAt, cm.routes, cm.speed),
+        routeAlpha: routeAlpha(t, shownAt, s.legEndsAt, cm.routes, cam.timeScale),
       };
     }
 
@@ -191,8 +194,8 @@ export class Timeline {
 
 /**
  * Free-mode camera bearing (STORY-5): the travel direction with a dead band and time smoothing, so small
- * changes in the trend do not turn the map and turns are eased – calmer at high playback speed, since the
- * smoothing is in video seconds. Precomputed over the whole track in one forward pass (dead band with a
+ * changes in the trend do not turn the map and turns are eased (time constant in time-base seconds, so with video
+ * seconds it is calmer at high playback speed). Precomputed over the whole track in one forward pass (dead band with a
  * "settle" rule so a sustained small offset is eventually followed) plus zero-phase smoothing: a pure function
  * of the track and settings, identical in preview and export.
  */
@@ -200,7 +203,7 @@ class BearingSeries {
   readonly step: number;
   readonly values: Float64Array;
 
-  constructor(track: Track, crsCode: string, s: FreeModeSettings, speed: number) {
+  constructor(track: Track, crsCode: string, s: FreeModeSettings, timeScale: number) {
     const dur = track.duration;
     this.step = Math.max(0.25, dur / 40000);
     const n = Math.max(2, Math.ceil(dur / this.step) + 1);
@@ -216,7 +219,7 @@ class BearingSeries {
     // it for a while (then follow it, so long gentle bends are not ignored for good).
     const dead = Math.max(0, s.rotationDeadband);
     if (dead > 0) {
-      const settle = Math.max(1, s.rotationSmoothing) * 1.5 * speed;
+      const settle = Math.max(1, s.rotationSmoothing) * 1.5 * timeScale;
       let target = v[0];
       let off = 0;
       for (let i = 0; i < n; i++) {
@@ -235,7 +238,7 @@ class BearingSeries {
       }
     }
     // Zero-phase exponential smoothing, two passes each way (smooth start and stop of the turns).
-    const tau = Math.max(0, s.rotationSmoothing) * speed;
+    const tau = Math.max(0, s.rotationSmoothing) * timeScale;
     if (tau > 0) {
       const a = 1 - Math.exp(-this.step / tau);
       for (let pass = 0; pass < 2; pass++) {

@@ -8,6 +8,7 @@
     loadUserPresets,
     parsePresetsJson,
     presetFromSettings,
+    presetForProject,
     saveUserPresets,
     type Preset,
   } from '../../lib/project/presets';
@@ -20,7 +21,7 @@
   let name = $state('');
 
   function apply(p: Preset) {
-    app.applySettings(p.settings);
+    app.applySettings(presetForProject(p.settings, app.timeBase, app.speed));
     app.toast(t('preset.applied', { name: label(p) }), 'ok');
   }
 
@@ -63,13 +64,20 @@
 
   function resetAll() {
     const d = defaultSettings();
-    app.applySettings({
-      free: d.free,
-      style: d.style,
-      courseStyle: d.courseStyle,
-      courseCamera: d.courseCamera,
-      routeDisplay: d.routeDisplay,
-    });
+    app.applySettings(
+      presetForProject(
+        {
+          free: d.free,
+          style: d.style,
+          courseStyle: d.courseStyle,
+          courseCamera: d.courseCamera,
+          routeDisplay: d.routeDisplay,
+          timeBase: d.timeBase,
+        },
+        app.timeBase,
+        app.speed,
+      ),
+    );
     app.toast(t('preset.wasReset'));
   }
 </script>

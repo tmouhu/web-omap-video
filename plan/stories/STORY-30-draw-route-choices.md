@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-4](../EPIC-4-course-animation.md) · **Priority:** Must · **Labels:** `course`, `editor`, `route-choice`
 
 ## User story
+
 As an **orienteer or coach**, I want to **draw the possible route choices of a leg on the map**, so that **the video can show the
 alternatives and their lengths before the runner's actual choice is revealed**.
 
 ## Acceptance criteria
+
 - [ ] Route choice tool, active for a selected leg (choose from the course panel or click a leg). The map can be shown in that
       leg's orientation while drawing.
 - [ ] Draw a route as a polyline: click to add points, drag to draw freehand (simplified afterwards), double-click / Enter to finish.
@@ -21,7 +23,9 @@ alternatives and their lengths before the runner's actual choice is revealed**.
 - [ ] Stored in the project, undoable.
 
 ## Dependencies
+
 [STORY-18](./STORY-18-set-course.md), [EN-15](../enablers/EN-15-project-model-and-persistence.md), [EN-16](../enablers/EN-16-ui-framework-design-system.md)
 
 ## Estimate
+
 TBD

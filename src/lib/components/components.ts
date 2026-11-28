@@ -25,16 +25,16 @@ export interface ComponentOptions {
   xAxis: 'distance' | 'time';
   /** Elevation: control ticks; Time/Distance: also show the current leg value. */
   showControls: boolean;
-  /** Pace smoothing window (s). */
+  /** Pace smoothing window (always real seconds: it measures the run, STORY-47). */
   paceWindow: number;
   /** Heart rate zone thresholds (bpm, ascending, 4 values → 5 zones). */
   hrZones: number[];
   /** Before the start passing: show a countdown (negative time) or zero. */
   beforeStart: 'countdown' | 'zero';
-  /** Splits: how long a control's splits stay fully visible (video s); the finish has its own time. */
+  /** Splits: how long a control's splits stay fully visible (time-base s); the finish has its own time. */
   splitShow: number;
   splitShowFinish: number;
-  /** Splits: fade-in / fade-out (video s). */
+  /** Splits: fade-in / fade-out (time-base s). */
   splitFadeIn: number;
   splitFadeOut: number;
   /** Splits: solid colour of the frame while nothing is shown (chroma-key it in the editor). */
@@ -117,8 +117,8 @@ export interface ComponentData {
   passings: number[] | null;
   /** Language of the texts in the video (labels, decimal separator). Default English. */
   locale?: VideoLocale;
-  /** Playback speed (track s per video s): display times of the splits component are in video seconds. */
-  speed?: number;
+  /** Track seconds per settings second (STORY-47): display times of the splits component. Default 1. */
+  timeScale?: number;
   /** Split comparison events (control passings with their rows), sorted by time; null = no results. */
   splits?: SplitEvent[] | null;
 }
@@ -174,7 +174,7 @@ const ZONE_COLORS = ['#7f8c9d', '#3ccf8e', '#f5d142', '#ff9f2e', '#ff4d4d'];
 
 /**
  * The split event visible at track time `d.t` and its opacity (0..1): fade in at the passing, fully visible
- * for the display time, then fade out (all in video seconds). A later passing replaces an earlier one.
+ * for the display time, then fade out (all in time-base seconds). A later passing replaces an earlier one.
  */
 export function splitsVisibility(d: ComponentData, o: ComponentOptions): { event: SplitEvent; alpha: number } | null {
   const ev = d.splits;
@@ -183,7 +183,7 @@ export function splitsVisibility(d: ComponentData, o: ComponentOptions): { event
   for (let k = 0; k < ev.length; k++) if (ev[k].t <= d.t) i = k;
   if (i < 0) return null;
   const e = ev[i];
-  const age = (d.t - e.t) / Math.max(1e-6, d.speed ?? 1);
+  const age = (d.t - e.t) / Math.max(1e-6, d.timeScale ?? 1);
   const fin = Math.max(0, o.splitFadeIn);
   const show = Math.max(0, e.row.finish ? o.splitShowFinish : o.splitShow);
   const fout = Math.max(0, o.splitFadeOut);

@@ -41,8 +41,13 @@ test('course mode: leg target straight above the leg start, preview = video fram
     const same = await hook(page, (h) => {
       const fs = h.app.timeline.frameStateAt(h.app.time, h.app.frame);
       const v = h.map().getView();
+      // Stable zoom: OL renders at a quantised resolution and the layers are magnified to the exact frame (the
+      // browser keeps ~6 significant digits of the CSS scale).
+      const tf = h.map().getViewport().querySelector('.ol-layers').style.transform as string;
+      const scale = tf ? parseFloat(tf.slice('scale('.length)) : 1;
       return (
-        Math.abs(v.getRotation() - fs.view.rotation) < 1e-9 && Math.abs(v.getResolution() - fs.view.resolution) < 1e-9
+        Math.abs(v.getRotation() - fs.view.rotation) < 1e-9 &&
+        Math.abs(v.getResolution() / scale / fs.view.resolution - 1) < 1e-4
       );
     });
     expect(same).toBe(true);

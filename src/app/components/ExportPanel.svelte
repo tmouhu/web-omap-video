@@ -20,6 +20,8 @@
   import { COMPONENT_META, isAvailable } from '../../lib/components/components';
   import { formatClock, formatDuration, parseDuration } from '../../lib/format';
   import type { LayerDesc } from '../../lib/map/layerModel';
+  import { clipListCsv, planTransitionClips, timecode, type TransitionClip } from '../../lib/export/clips';
+  import { pointLabel } from '../../lib/course/course';
   // Lazy: mediabunny + export code load only when needed.
   const exporter = () => import('../../lib/export/exporter');
 
@@ -50,7 +52,35 @@
       mbps: compMbps(c.width, c.height),
     })),
   ]);
-  const totalBytes = $derived(outputs.reduce((s, o) => s + estimatedBytes(o.mbps, videoSeconds), 0));
+  /** Real-time transition clips (STORY-46): planned from a timeline whose leg changes take their on-screen time. */
+  const clipsOn = $derived(app.exportMap && app.exportTransitionClips && app.courseMode);
+  const clipPlan = $derived.by((): { clips: TransitionClip[]; override: number } => {
+    if (!clipsOn || !r) return { clips: [], override: 0 };
+    // The clip shows the move as long as it appears in the main video (transition duration in video seconds).
+    const override = (app.courseCamera.transitionDuration * app.timeScale) / app.speed;
+    const cam = app.buildTimeline(override)?.camera({ width: app.frame.width, height: app.frame.height });
+    if (!cam) return { clips: [], override };
+    const clips = planTransitionClips(cam, {
+      rangeStart: r.start,
+      rangeEnd: r.end,
+      speed: app.speed,
+      fps: app.exportFps,
+      pad: Math.max(0, app.transitionClipPad),
+    });
+    return { clips, override };
+  });
+  const clipSeconds = $derived(clipPlan.clips.reduce((s, c) => s + c.frames / app.exportFps, 0));
+  const totalBytes = $derived(
+    outputs.reduce((s, o) => s + estimatedBytes(o.mbps, videoSeconds), 0) + estimatedBytes(mbps, clipSeconds),
+  );
+  const fileCount = $derived(outputs.length + clipPlan.clips.length + (clipPlan.clips.length ? 1 : 0));
+
+  /** File-name part of a clip: the leg it enters (e.g. `leg3-4`) or the overview after the finish. */
+  function clipLabel(li: number): string {
+    const c = app.course;
+    if (!c || li + 1 >= c.points.length) return 'overview';
+    return `leg${pointLabel(c, li)}-${pointLabel(c, li + 1)}`;
+  }
   const clock0 = $derived(app.track && r ? firstFrameClock(app.track, r) : null);
   const pct = $derived(app.exportProgress.total ? (app.exportProgress.done / app.exportProgress.total) * 100 : 0);
   const eta = $derived.by(() => {
@@ -104,11 +134,35 @@
       const name = ex.videoFileName(track.name, app.exportFps, o.width, o.height, codec.extension, app.speed, o.id);
       planned.push({ ...o, codec, name });
     }
+    // Real-time transition clips (STORY-46): same size and codec as the map video, rendered at 1×.
+    const mapPlan = planned.find((p) => p.id === 'map');
+    const { clips, override } = clipPlan;
+    const clipTl = mapPlan && clips.length ? app.buildTimeline(override) : null;
+    const clipFiles = clipTl
+      ? clips.map((c) => ({
+          ...c,
+          label: clipLabel(c.legIndex),
+          file: ex.videoFileName(
+            track.name,
+            app.exportFps,
+            mapPlan!.width,
+            mapPlan!.height,
+            mapPlan!.codec.extension,
+            1,
+            `map_rt_${clipLabel(c.legIndex)}_at${timecode(c.mainFrame, app.exportFps, '-')}`,
+          ),
+        }))
+      : [];
     let opened;
     try {
-      opened = await ex.openPackageTargets(
-        planned.map((p) => ({ name: p.name, codec: p.codec, bytes: estimatedBytes(p.mbps, videoSeconds) })),
-      );
+      opened = await ex.openPackageTargets([
+        ...planned.map((p) => ({ name: p.name, codec: p.codec, bytes: estimatedBytes(p.mbps, videoSeconds) })),
+        ...clipFiles.map((c) => ({
+          name: c.file,
+          codec: mapPlan!.codec,
+          bytes: estimatedBytes(mapPlan!.mbps, c.frames / app.exportFps),
+        })),
+      ]);
     } catch (e) {
       app.exportError = errorText(e);
       return;
@@ -117,7 +171,8 @@
     app.exporting = true;
     abort = new AbortController();
     const t0 = performance.now();
-    app.exportProgress = { done: 0, total: frames, startedAt: t0 };
+    const total = frames + clipFiles.reduce((s, c) => s + c.frames, 0);
+    app.exportProgress = { done: 0, total, startedAt: t0 };
     try {
       const res = await ex.exportPackage({
         timeline: tl,
@@ -144,10 +199,48 @@
           component: app.components.find((c) => c.kind === p.kind),
         })),
         signal: abort.signal,
-        onProgress: (done, total) => {
+        onProgress: (done) => {
           app.exportProgress = { done, total, startedAt: t0 };
         },
       });
+      // Clips: one map lane each, 1×, same camera except for the leg-change animation.
+      let doneFrames = res.frames;
+      const clipResults: { file: File; target: import('../../lib/export/exporter').ExportTarget }[] = [];
+      for (let k = 0; k < clipFiles.length; k++) {
+        const c = clipFiles[k];
+        const target = opened.targets[planned.length + k];
+        const cr = await ex.exportPackage({
+          timeline: clipTl!,
+          cssWidth: app.frame.width,
+          cssHeight: app.frame.height,
+          fps: app.exportFps,
+          speed: 1,
+          startT: c.start,
+          endT: c.end,
+          scene: app.projectScene,
+          layers: $state.snapshot(app.layers) as LayerDesc[],
+          raster: app.raster,
+          origin: range.origin,
+          passings: null,
+          outputs: [
+            {
+              id: `clip-${k}`,
+              kind: 'map',
+              width: mapPlan!.width,
+              height: mapPlan!.height,
+              bitrateMbps: mapPlan!.mbps,
+              codec: mapPlan!.codec,
+              target,
+            },
+          ],
+          signal: abort.signal,
+          onProgress: (done) => {
+            app.exportProgress = { done: doneFrames + done, total, startedAt: t0 };
+          },
+        });
+        doneFrames += cr.frames;
+        clipResults.push({ file: cr.files[0].file, target });
+      }
       const files: ExportFileView[] = res.files.map((f, i) => ({
         id: f.id,
         kind: planned[i].kind,
@@ -157,6 +250,32 @@
         name: planned[i].name,
         savedToDisk: opened.targets[i].savedToDisk,
       }));
+      clipResults.forEach((c, k) =>
+        files.push({
+          id: `clip-${k}`,
+          kind: 'clip',
+          label: t('ex.clipLabel', { leg: clipFiles[k].label }),
+          url: URL.createObjectURL(c.file),
+          file: c.file,
+          name: clipFiles[k].file,
+          savedToDisk: c.target.savedToDisk,
+        }),
+      );
+      const csv = clipFiles.length ? clipListCsv(clipFiles, { fps: app.exportFps, speed: app.speed }) : '';
+      const csvName = 'transition-clips.csv';
+      if (csv && opened.folder) await ex.writeToFolder(opened.folder, csvName, csv);
+      if (csv) {
+        const file = new File([csv], csvName, { type: 'text/csv' });
+        files.push({
+          id: 'clip-list',
+          kind: 'csv',
+          label: t('ex.clipList'),
+          url: URL.createObjectURL(file),
+          file,
+          name: csvName,
+          savedToDisk: !!opened.folder,
+        });
+      }
       const info = {
         app: 'OMap Video',
         track: track.name,
@@ -167,6 +286,14 @@
         durationSeconds: res.seconds,
         range: { start: range.start, end: range.end, mode: range.mode },
         firstFrameClock: clock0 === null ? null : new Date(clock0).toISOString(),
+        transitionClips: clipFiles.map((c) => ({
+          file: c.file,
+          leg: c.label,
+          mainFrame: c.mainFrame,
+          trackStart: c.start,
+          trackEnd: c.end,
+          frames: c.frames,
+        })),
       };
       if (opened.folder) await ex.writeToFolder(opened.folder, 'export.json', JSON.stringify(info, null, 2));
       app.exportResult = {
@@ -283,6 +410,32 @@
     <input type="checkbox" bind:checked={app.exportMap} disabled={app.locked} data-testid="export-map" />
     {t('ex.mapVideo')}
   </label>
+  {#if app.courseMode}
+    <label class="check">
+      <input
+        type="checkbox"
+        bind:checked={app.exportTransitionClips}
+        disabled={app.locked || !app.exportMap}
+        data-testid="export-clips"
+      />
+      {t('ex.clips')}
+    </label>
+    {#if app.exportTransitionClips && app.exportMap}
+      <label class="field">
+        <span>{t('ex.clipPad')}</span>
+        <input
+          type="number"
+          min="0"
+          max="30"
+          step="0.5"
+          bind:value={app.transitionClipPad}
+          disabled={app.locked}
+          data-testid="clip-pad"
+        />
+      </label>
+      <small class="muted">{t('ex.clipsHelp', { n: clipPlan.clips.length })}</small>
+    {/if}
+  {/if}
   <div class="grid2">
     <label class="field">
       <span>{t('ex.resolution')}</span>
@@ -334,7 +487,7 @@
       </div>{/if}
     <div>
       <span>{t('ex.estSize')}</span><b>
-        ~{mb(totalBytes)} · {outputs.length === 1 ? t('ex.files1') : t('ex.files', { n: outputs.length })}
+        ~{mb(totalBytes)} · {fileCount === 1 ? t('ex.files1') : t('ex.files', { n: fileCount })}
       </b>
     </div>
   </div>
@@ -390,7 +543,11 @@
         {#each res.files as f (f.id)}
           <li>
             <span class="fname" title={f.name}>
-              {f.kind === 'map' ? t('ex.mapLabel') : t(`comp.${f.kind}` as MsgKey)}
+              {f.kind === 'map'
+                ? t('ex.mapLabel')
+                : f.kind === 'clip' || f.kind === 'csv'
+                  ? f.label
+                  : t(`comp.${f.kind}` as MsgKey)}
             </span>
             <span class="mono small muted">{mb(f.file.size)}</span>
             {#if f.savedToDisk}

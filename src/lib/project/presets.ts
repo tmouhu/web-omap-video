@@ -5,9 +5,11 @@
  */
 import { UserError } from '../i18n/core';
 import type { ProjectSettings } from './project';
+import { convertTimedSettings, upgradeLegacyTimes, type TimeBase } from './timeBase';
 
+/** `timeBase`: unit of the preset's durations (STORY-47); missing in presets made before it (and the built-ins). */
 export type PresetSettings = Partial<
-  Pick<ProjectSettings, 'free' | 'style' | 'courseStyle' | 'courseCamera' | 'routeDisplay' | 'components'>
+  Pick<ProjectSettings, 'free' | 'style' | 'courseStyle' | 'courseCamera' | 'routeDisplay' | 'components' | 'timeBase'>
 >;
 
 export interface Preset {
@@ -101,8 +103,25 @@ export function presetFromSettings(name: string, s: ProjectSettings): Preset {
       courseCamera: s.courseCamera,
       routeDisplay: s.routeDisplay,
       components: s.components,
+      timeBase: s.timeBase,
     },
   };
+}
+
+/**
+ * A preset's settings converted to the project's time base (STORY-47), ready for `applySettings`. The project
+ * keeps its own time base. Presets without a time base use the units from before STORY-47 (approach start and tail
+ * in real seconds, route display times in their own unit, the rest in video seconds), so they look as they did.
+ */
+export function presetForProject(p: PresetSettings, base: TimeBase, speed: number): Partial<ProjectSettings> {
+  // JSON clone: presets may be reactive proxies (structuredClone rejects them).
+  const s = JSON.parse(JSON.stringify(p)) as PresetSettings & { routeDisplay?: { timeBase?: unknown } };
+  const from = s.timeBase;
+  delete s.timeBase;
+  if (from === 'video' || from === 'real') convertTimedSettings(s, from, base, speed);
+  else upgradeLegacyTimes(s, s.routeDisplay?.timeBase === 'real' ? 'real' : 'video', base, speed);
+  if (s.routeDisplay) delete s.routeDisplay.timeBase;
+  return s as Partial<ProjectSettings>;
 }
 
 /** Parses an exported presets file (one preset or a list). */

@@ -3,11 +3,13 @@
 **Type:** Enabler (architecture) · **Epic:** [EPIC-2](../EPIC-2-maps-and-coordinates.md) · **Priority:** Must · **Labels:** `tech`, `map`, `rendering`
 
 ## Summary
+
 A layer model on top of OpenLayers ([EN-2](./EN-2-canvas-map-renderer.md)), so that MapAnt, other WMTS/WMS/XYZ services
 and the local raster map can be shown in any view CRS ([EN-12](./EN-12-coordinate-reference-systems.md)), stacked and
 blended, and stored in the project.
 
 ## Scope / acceptance criteria
+
 - [ ] Layer types mapped to OL sources:
   - **WMTS** → `ol/source/WMTS` with options from `ol/format/WMTSCapabilities` (e.g. MapAnt `ETRS-TM35FIN` and `EPSG3857`)
   - **WMS** → `ol/source/TileWMS` (tiled, cacheable). Tile size is kept moderate for MapAnt WMS (≤ 1024 px).
@@ -25,7 +27,9 @@ blended, and stored in the project.
 - [ ] Tests: tile URLs for a rotated view in TM35 and in 3857; reprojection quality check (no visible seams at 1:5 000–1:20 000).
 
 ## Dependencies
+
 [EN-2](./EN-2-canvas-map-renderer.md), [EN-3](./EN-3-tile-source-and-cache.md), [EN-12](./EN-12-coordinate-reference-systems.md)
 
 ## Estimate
+
 TBD

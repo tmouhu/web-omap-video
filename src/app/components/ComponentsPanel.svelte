@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { t } from '../i18n.svelte';
+  import { secs, t } from '../i18n.svelte';
   import { LOCALES } from '../../lib/i18n/core';
   /** Data component videos (STORY-32..34): enable, size, style, kind options, live preview at the playhead. */
   import { app } from '../state.svelte';
   import { COMPONENT_META, drawComponent, isAvailable, type ComponentConfig } from '../../lib/components/components';
 
   const canvases: Record<string, HTMLCanvasElement> = {};
+  /** Slider range factor: real seconds at a high speed (STORY-47). */
+  const rk = $derived(app.timeBase === 'real' ? Math.max(1, app.speed) : 1);
 
   // Live previews: redraw when the playhead, data or any component setting changes.
   $effect(() => {
@@ -15,7 +17,7 @@
     const passings = app.passings?.map((p) => p.t) ?? null;
     void app.videoLocale;
     const splits = app.splitEvents;
-    const speed = app.speed;
+    const timeScale = app.timeScale;
     const cfgs = $state.snapshot(app.components) as ComponentConfig[];
     if (!track || !r) return;
     for (const cfg of cfgs) {
@@ -31,7 +33,7 @@
         origin: r.origin,
         passings,
         locale: app.videoLocale,
-        speed,
+        timeScale,
         splits,
       });
     }
@@ -168,20 +170,20 @@
               </label>
             {:else if c.kind === 'splits'}
               <label class="field">
-                <span>{t('dv.splitShow', { s: c.options.splitShow })}</span>
-                <input type="range" min="1" max="20" step="0.5" bind:value={c.options.splitShow} />
+                <span>{t('dv.splitShow', { s: secs(c.options.splitShow, app.timeBase) })}</span>
+                <input type="range" min="1" max={20 * rk} step={0.5 * rk} bind:value={c.options.splitShow} />
               </label>
               <label class="field">
-                <span>{t('dv.splitShowFinish', { s: c.options.splitShowFinish })}</span>
-                <input type="range" min="1" max="30" step="0.5" bind:value={c.options.splitShowFinish} />
+                <span>{t('dv.splitShowFinish', { s: secs(c.options.splitShowFinish, app.timeBase) })}</span>
+                <input type="range" min="1" max={30 * rk} step={0.5 * rk} bind:value={c.options.splitShowFinish} />
               </label>
               <label class="field">
-                <span>{t('dv.fadeIn', { s: c.options.splitFadeIn })}</span>
-                <input type="range" min="0" max="2" step="0.1" bind:value={c.options.splitFadeIn} />
+                <span>{t('dv.fadeIn', { s: secs(c.options.splitFadeIn, app.timeBase) })}</span>
+                <input type="range" min="0" max={2 * rk} step={0.1 * rk} bind:value={c.options.splitFadeIn} />
               </label>
               <label class="field">
-                <span>{t('dv.fadeOut', { s: c.options.splitFadeOut })}</span>
-                <input type="range" min="0" max="3" step="0.1" bind:value={c.options.splitFadeOut} />
+                <span>{t('dv.fadeOut', { s: secs(c.options.splitFadeOut, app.timeBase) })}</span>
+                <input type="range" min="0" max={3 * rk} step={0.1 * rk} bind:value={c.options.splitFadeOut} />
               </label>
               <label class="field">
                 <span>{t('dv.keyColor')}</span>

@@ -69,6 +69,7 @@ import {
 import { DEFAULT_COURSE_STYLE, type CourseStyle } from '../lib/render/overprint';
 import { DEFAULT_SCENE_STYLE, type SceneStyle } from '../lib/render/scene';
 import { Track } from '../lib/track/track';
+import { convertTimedSettings, timeScaleFor, type TimeBase } from '../lib/project/timeBase';
 
 export const ASPECTS = [
   { label: '16:9', value: 16 / 9 },
@@ -293,6 +294,10 @@ class AppState {
   time = $state(0);
   playing = $state(false);
   speed = $state(1);
+  /** Unit of every display/animation duration in the settings (STORY-47). */
+  timeBase = $state<TimeBase>('video');
+  /** Track seconds per settings second. */
+  timeScale = $derived(timeScaleFor(this.timeBase, this.speed));
   free = $state<FreeModeSettings>({ ...DEFAULT_FREE_MODE });
   style = $state<SceneStyle>({ ...DEFAULT_SCENE_STYLE });
 
@@ -347,6 +352,9 @@ class AppState {
   exportRange = $state<ExportRangeSettings>({ ...DEFAULT_EXPORT_RANGE });
   /** Include the map video in the export package. */
   exportMap = $state(true);
+  /** Also export each leg change as a real-time (1×) map clip (STORY-46), with this padding (s) around it. */
+  exportTransitionClips = $state(false);
+  transitionClipPad = $state(3);
   /** Language of texts in the exported videos (component labels, decimal commas) – STORY-40. */
   videoLocale = $state<VideoLocale>(i18n.locale === 'fi' ? 'fi' : 'en');
   /** Data component videos (STORY-32..34). */
@@ -361,7 +369,13 @@ class AppState {
   exportResult = $state.raw<ExportResultView | null>(null);
   exportError = $state('');
 
-  timeline: Timeline | null = $derived.by(() => {
+  timeline: Timeline | null = $derived.by(() => this.buildTimeline());
+
+  /**
+   * The project's timeline. `transitionOverride` (track s) animates the leg changes over a different time for the
+   * real-time transition clips (STORY-46); everything else is as in the main video.
+   */
+  buildTimeline(transitionOverride?: number): Timeline | null {
     const track = this.track;
     if (!track) return null;
     const course = this.course;
@@ -375,11 +389,13 @@ class AppState {
             camera: $state.snapshot(this.courseCamera),
             routes: $state.snapshot(this.routeDisplay),
             speed: this.speed,
+            timeScale: this.timeScale,
+            transitionOverride,
             legExtras: (li: number) => routesForLeg(routes, course, li).flatMap((r) => r.points),
           }
         : null;
-    return new Timeline(track, this.crs.code, $state.snapshot(this.free), cm, this.mapNorth, this.speed);
-  });
+    return new Timeline(track, this.crs.code, $state.snapshot(this.free), cm, this.mapNorth, this.timeScale);
+  }
   /** Everything drawn over the map, shared by preview and export (see lib/render/frameScene.ts). */
   projectScene: ProjectScene | null = $derived(
     this.track
@@ -392,6 +408,7 @@ class AppState {
           printScale: this.raster?.printScale ?? null,
           routes: this.routes,
           videoLocale: this.videoLocale,
+          timeScale: this.timeScale,
         }
       : null,
   );
@@ -508,15 +525,31 @@ class AppState {
       components: this.components,
       exportRange: this.exportRange,
       exportMap: this.exportMap,
+      exportTransitionClips: this.exportTransitionClips,
+      transitionClipPad: this.transitionClipPad,
       exportShortSide: this.exportShortSide,
       exportFps: this.exportFps,
       bitrateAuto: this.bitrateAuto,
       bitrateMbps: this.bitrateMbps,
       speed: this.speed,
+      timeBase: this.timeBase,
       aspect: this.aspect,
       frameCustom: this.frameCustom,
       videoLocale: this.videoLocale,
     }) as ProjectSettings;
+  }
+
+  /**
+   * Switches the time base (STORY-47): every timed setting is converted with the current speed, so the video does
+   * not change. Later speed changes keep the numbers (video seconds keep the on-screen timing, real seconds the race
+   * timing).
+   */
+  setTimeBase(base: TimeBase): void {
+    if (base === this.timeBase || this.locked) return;
+    const s = convertTimedSettings(this.settings(), this.timeBase, base, this.speed);
+    s.timeBase = base;
+    this.applySettings(s);
+    this.toast(t('time.converted', { unit: t(base === 'real' ? 'time.real' : 'time.video') }), 'ok');
   }
 
   /** Applies (possibly partial) settings, e.g. from a preset; missing parts keep their current values. */
@@ -531,11 +564,14 @@ class AppState {
     this.components = s.components;
     this.exportRange = s.exportRange;
     this.exportMap = s.exportMap;
+    this.exportTransitionClips = s.exportTransitionClips;
+    this.transitionClipPad = s.transitionClipPad;
     this.exportShortSide = s.exportShortSide;
     this.exportFps = s.exportFps;
     this.bitrateAuto = s.bitrateAuto;
     this.bitrateMbps = s.bitrateMbps;
     this.speed = s.speed;
+    this.timeBase = s.timeBase === 'real' ? 'real' : 'video';
     this.aspect = s.aspect;
     this.frameCustom = s.frameCustom;
     this.videoLocale = s.videoLocale === 'fi' ? 'fi' : 'en';

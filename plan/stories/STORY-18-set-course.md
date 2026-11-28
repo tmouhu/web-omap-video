@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-3](../EPIC-3-course-and-gpx.md) · **Priority:** Must · **Labels:** `course`, `orienteering`, `ui`
 
 ## User story
+
 As an **orienteer**, I want to **place the start, the controls and the finish of my course on the map**,
 so that **the animation can follow the course leg by leg**.
 
 ## Acceptance criteria
+
 - [ ] A course consists of **one start, at least one control and one finish**, in order. The app does not allow animating
       a course that does not meet this, and shows what is missing.
 - [ ] Course tool: click to place the start, then controls in order, then "finish" (button or double-click / Enter).
@@ -21,11 +23,14 @@ so that **the animation can follow the course leg by leg**.
 - [ ] All edits are undoable.
 
 ## Open questions / refinement
+
 - Score-O / free-order courses: out of scope (the leg-based camera needs a fixed order).
 - Mandatory crossing points / marked routes between controls (ISOM 708 / 709)? Proposed: later story.
 
 ## Dependencies
+
 [EN-2](../enablers/EN-2-canvas-map-renderer.md), [EN-15](../enablers/EN-15-project-model-and-persistence.md), [EN-16](../enablers/EN-16-ui-framework-design-system.md)
 
 ## Estimate
+
 TBD

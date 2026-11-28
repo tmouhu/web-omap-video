@@ -2,12 +2,23 @@
 import { writeFileSync } from 'node:fs';
 
 let seed = 42;
-const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const origin = { lat: 60.2035, lon: 24.9105 }; // Helsinki Central Park
 const mLat = 111320;
 const mLon = 111320 * Math.cos((origin.lat * Math.PI) / 180);
 // Controls in meters (east, north) from the origin.
-const controls = [[0, 0], [250, 180], [520, 90], [610, 420], [380, 640], [120, 520], [-150, 700], [-320, 380], [-180, 120], [0, 0]];
+const controls = [
+  [0, 0],
+  [250, 180],
+  [520, 90],
+  [610, 420],
+  [380, 640],
+  [120, 520],
+  [-150, 700],
+  [-320, 380],
+  [-180, 120],
+  [0, 0],
+];
 
 const pts = [];
 let t = Date.parse('2026-05-10T10:00:00Z');
@@ -30,7 +41,10 @@ for (let c = 1; c < controls.length; c++) {
 }
 
 const body = pts
-  .map((p) => `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}"><time>${new Date(p.t).toISOString()}</time></trkpt>`)
+  .map(
+    (p) =>
+      `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}"><time>${new Date(p.t).toISOString()}</time></trkpt>`,
+  )
   .join('\n');
 writeFileSync(
   new URL('../public/sample.gpx', import.meta.url),

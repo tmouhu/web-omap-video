@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-5](../EPIC-5-data-component-videos.md) · **Priority:** Must · **Labels:** `video`, `components`
 
 ## User story
+
 As a **viewer**, I want to **see the runner's pace, heart rate, elapsed time and distance**, so that **I understand the effort
 and progress at each moment of the head cam video**.
 
 ## Acceptance criteria
+
 - [ ] **Pace**: min/km (`5:42 /km`), smoothed over a configurable window (default 10 s); shows `–:–` when standing still.
       Optional mini sparkline of the last N seconds.
 - [ ] **Heart rate**: bpm, with optional zone colour (zones set by the user as bpm thresholds or % of max HR) and a pulsing
@@ -24,10 +26,13 @@ and progress at each moment of the head cam video**.
 - [ ] Unit tests for formatting edge cases: 999.6 m → `1.00 km` (no `1000 m`), 59:59.6 → `1:00:00`.
 
 ## Open questions / refinement
+
 - One video per value (most flexible), or also a combined "dashboard" layout as one video? Proposed: both; single-value is the default.
 
 ## Dependencies
+
 [STORY-32](./STORY-32-data-component-videos.md)
 
 ## Estimate
+
 TBD

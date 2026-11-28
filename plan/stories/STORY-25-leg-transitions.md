@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-4](../EPIC-4-course-animation.md) · **Priority:** Must · **Labels:** `animation`, `camera`
 
 ## User story
+
 As a **viewer**, I want **the map to turn, move and zoom smoothly from one leg's view to the next** when the runner punches a
 control, so that **I keep my orientation and the video feels polished**.
 
 ## Acceptance criteria
+
 - [ ] A transition starts at the control's passing time plus a configurable **delay** (default 0.5 s video time; may be
       negative to start slightly before the punch), and lasts a configurable **duration** (default 1.5 s video time).
 - [ ] Rotation, scale and centre are interpolated together:
@@ -24,10 +26,13 @@ control, so that **I keep my orientation and the video feels polished**.
       ([EN-14](../enablers/EN-14-animation-timeline-camera.md)).
 
 ## Open questions / refinement
+
 - Option "pause time during transitions" for non-synced highlight videos? It would break real-time alignment with the head cam.
 
 ## Dependencies
+
 [STORY-24](./STORY-24-leg-oriented-view.md), [EN-14](../enablers/EN-14-animation-timeline-camera.md)
 
 ## Estimate
+
 TBD

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dist, t } from '../i18n.svelte';
+  import { dist, secs, t } from '../i18n.svelte';
   /** Camera (free mode / leg-by-leg course mode, STORY-24..27) and runner + tail style (STORY-28/29). */
   import { app, SCALE_PRESETS } from '../state.svelte';
   import { courseProblems } from '../../lib/course/course';
@@ -9,12 +9,38 @@
   const cam = $derived(app.courseCamera);
   let advanced = $state(false);
   const st = $derived(app.style.track);
+  const tb = $derived(app.timeBase);
+  /** Slider ranges: real seconds at a high speed need a longer range (values are converted when switching). */
+  const k = $derived(tb === 'real' ? Math.max(1, app.speed) : 1);
 
   function scaleInput(e: Event, set: (v: number) => void) {
     const v = +(e.currentTarget as HTMLInputElement).value;
     if (Number.isFinite(v) && v >= 500 && v <= 200000) set(v);
   }
 </script>
+
+<section class="section" data-testid="time-base-panel">
+  <div class="sec-head"><h3 class="sec-title">{t('time.title')}</h3></div>
+  <div class="seg" role="group" aria-label={t('time.title')}>
+    <button
+      aria-pressed={tb !== 'real'}
+      disabled={app.locked}
+      onclick={() => app.setTimeBase('video')}
+      data-testid="time-base-video"
+    >
+      {t('time.video')}
+    </button>
+    <button
+      aria-pressed={tb === 'real'}
+      disabled={app.locked}
+      onclick={() => app.setTimeBase('real')}
+      data-testid="time-base-real"
+    >
+      {t('time.real')}
+    </button>
+  </div>
+  <small class="muted">{t('time.help')}</small>
+</section>
 
 <section class="section" data-testid="camera-panel">
   <div class="sec-head">
@@ -64,10 +90,42 @@
       </label>
     </div>
     <small class="muted">{t('cam.panHelp')}</small>
-    <label class="field">
-      <span>{t('cam.turnDuration', { s: cam.transitionDuration.toFixed(1) })}</span>
-      <input type="range" min="0.3" max="4" step="0.1" bind:value={cam.transitionDuration} disabled={app.locked} />
-    </label>
+    <div class="field">
+      <span>{t('cam.legChange')}</span>
+      <div class="seg" role="group" aria-label={t('cam.legChange')}>
+        <button
+          aria-pressed={cam.legChange !== 'instant'}
+          disabled={app.locked}
+          onclick={() => (cam.legChange = 'animated')}
+          data-testid="leg-change-animated"
+        >
+          {t('cam.legChangeAnimated')}
+        </button>
+        <button
+          aria-pressed={cam.legChange === 'instant'}
+          disabled={app.locked}
+          onclick={() => (cam.legChange = 'instant')}
+          data-testid="leg-change-instant"
+        >
+          {t('cam.legChangeInstant')}
+        </button>
+      </div>
+    </div>
+    {#if cam.legChange === 'instant'}
+      <small class="muted">{t('cam.legChangeHelp')}</small>
+    {:else}
+      <label class="field">
+        <span>{t('cam.turnDuration', { s: secs(cam.transitionDuration, tb) })}</span>
+        <input
+          type="range"
+          min={0.3 * k}
+          max={4 * k}
+          step={0.1 * k}
+          bind:value={cam.transitionDuration}
+          disabled={app.locked}
+        />
+      </label>
+    {/if}
     {#if advanced}
       <label class="field">
         <span>{t('cam.margin', { pct: Math.round(cam.marginFraction * 100) })}</span>
@@ -75,17 +133,26 @@
       </label>
       <label class="field">
         <span>
-          {t('cam.turnStarts', { s: (cam.transitionDelay >= 0 ? '+' : '') + cam.transitionDelay.toFixed(1) })}
+          {t(cam.legChange === 'instant' ? 'cam.cutAt' : 'cam.turnStarts', { s: secs(cam.transitionDelay, tb, true) })}
         </span>
-        <input type="range" min="-2" max="3" step="0.1" bind:value={cam.transitionDelay} disabled={app.locked} />
+        <input
+          type="range"
+          min={-2 * k}
+          max={3 * k}
+          step={0.1 * k}
+          bind:value={cam.transitionDelay}
+          disabled={app.locked}
+        />
       </label>
-      <div class="seg" role="group" aria-label={t('cam.easing')}>
-        {#each ['sine', 'cubic', 'linear'] as const as v (v)}
-          <button aria-pressed={cam.easing === v} disabled={app.locked} onclick={() => (cam.easing = v)}>
-            {t(`ease.${v}`)}
-          </button>
-        {/each}
-      </div>
+      {#if cam.legChange !== 'instant'}
+        <div class="seg" role="group" aria-label={t('cam.easing')}>
+          {#each ['sine', 'cubic', 'linear'] as const as v (v)}
+            <button aria-pressed={cam.easing === v} disabled={app.locked} onclick={() => (cam.easing = v)}>
+              {t(`ease.${v}`)}
+            </button>
+          {/each}
+        </div>
+      {/if}
       <label class="field">
         <span>{t('cam.afterFinish')}</span>
         <select bind:value={cam.afterFinish} disabled={app.locked}>
@@ -161,8 +228,15 @@
     {#if cam.approachEnabled && cam.legZoom !== 'target'}
       <div class="grid2">
         <label class="field">
-          <span>{t('cam.approachStarts', { s: cam.approachSeconds })}</span>
-          <input type="range" min="3" max="40" step="1" bind:value={cam.approachSeconds} disabled={app.locked} />
+          <span>{t('cam.approachStarts', { s: secs(cam.approachSeconds, tb) })}</span>
+          <input
+            type="range"
+            min={0.5}
+            max={40 * k}
+            step={0.5}
+            bind:value={cam.approachSeconds}
+            disabled={app.locked}
+          />
         </label>
         <label class="field">
           <span>{t('cam.zoomTo')}</span>
@@ -240,12 +314,12 @@
         />
       </label>
       <label class="field">
-        <span>{t('cam.rotationSmoothing', { s: app.free.rotationSmoothing.toFixed(1) })}</span>
+        <span>{t('cam.rotationSmoothing', { s: secs(app.free.rotationSmoothing, tb) })}</span>
         <input
           type="range"
           min="0"
-          max="5"
-          step="0.1"
+          max={5 * k}
+          step={0.1 * k}
           bind:value={app.free.rotationSmoothing}
           disabled={app.locked}
           data-testid="rotation-smoothing"
@@ -273,8 +347,8 @@
   </div>
   {#if st.tailMode === 'seconds'}
     <label class="field">
-      <span>{t('run.tailSeconds', { s: st.tailSeconds })}</span>
-      <input type="range" min="5" max="300" step="5" bind:value={st.tailSeconds} data-testid="tail-seconds" />
+      <span>{t('run.tailSeconds', { s: secs(st.tailSeconds, tb) })}</span>
+      <input type="range" min="1" max={300 * k} step="1" bind:value={st.tailSeconds} data-testid="tail-seconds" />
     </label>
   {/if}
   <div class="seg" role="group" aria-label={t('run.tailColour')}>
@@ -304,6 +378,23 @@
     {t('run.travelled')}
   </label>
   <label class="check"><input type="checkbox" bind:checked={st.showFuture} /> {t('run.future')}</label>
+  <div class="field">
+    <span>{t('run.marker')}</span>
+    <div class="seg" role="group" aria-label={t('run.marker')}>
+      <button aria-pressed={st.marker !== 'circle'} onclick={() => (st.marker = 'arrow')} data-testid="marker-arrow">
+        {t('run.markerArrow')}
+      </button>
+      <button aria-pressed={st.marker === 'circle'} onclick={() => (st.marker = 'circle')} data-testid="marker-circle">
+        {t('run.markerCircle')}
+      </button>
+    </div>
+  </div>
+  {#if st.marker === 'circle'}
+    <label class="check">
+      <input type="checkbox" bind:checked={st.markerRing} data-testid="marker-ring" />
+      {t('run.markerRing')}
+    </label>
+  {/if}
   <div class="grid2">
     <label class="field">
       <span>{t('run.arrowSize', { px: st.arrowSize })}</span>

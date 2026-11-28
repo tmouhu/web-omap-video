@@ -127,7 +127,7 @@ describe('splits component visibility', () => {
     { t: 200, number: 3, row: row(true) },
   ];
   const o = { ...DEFAULT_COMPONENT_OPTIONS, splitFadeIn: 0.5, splitShow: 4, splitFadeOut: 1, splitShowFinish: 8 };
-  const at = (t: number, speed = 1) => splitsVisibility({ ...data(t), splits: events, speed }, o);
+  const at = (t: number, timeScale = 1) => splitsVisibility({ ...data(t), splits: events, timeScale }, o);
 
   it('hidden before the first passing and after the fade-out', () => {
     expect(at(99)).toBeNull();

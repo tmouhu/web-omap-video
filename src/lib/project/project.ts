@@ -24,6 +24,7 @@ import type { RasterGeoref } from '../raster/rasterMap';
 import type { ResultsDoc } from '../results/results';
 import { DEFAULT_COURSE_STYLE, type CourseStyle } from '../render/overprint';
 import { DEFAULT_SCENE_STYLE, type SceneStyle } from '../render/scene';
+import { upgradeLegacyTimes, type TimeBase } from './timeBase';
 
 export const PROJECT_VERSION = 1;
 export const PROJECT_EXT = 'omvproj';
@@ -39,11 +40,16 @@ export interface ProjectSettings {
   components: ComponentConfig[];
   exportRange: ExportRangeSettings;
   exportMap: boolean;
+  /** Real-time transition clips (STORY-46) and their padding (s). */
+  exportTransitionClips: boolean;
+  transitionClipPad: number;
   exportShortSide: number;
   exportFps: number;
   bitrateAuto: boolean;
   bitrateMbps: number;
   speed: number;
+  /** Unit of all display/animation durations (STORY-47). */
+  timeBase: TimeBase;
   aspect: number;
   frameCustom: { width: number; height: number } | null;
   /** Language of texts in the exported videos (STORY-40). */
@@ -61,11 +67,14 @@ export function defaultSettings(): ProjectSettings {
     components: defaultComponents(),
     exportRange: { ...DEFAULT_EXPORT_RANGE },
     exportMap: true,
+    exportTransitionClips: false,
+    transitionClipPad: 3,
     exportShortSide: 1080,
     exportFps: 30,
     bitrateAuto: true,
     bitrateMbps: 30,
     speed: 1,
+    timeBase: 'video',
     aspect: 16 / 9,
     frameCustom: null,
     videoLocale: 'en',
@@ -138,13 +147,21 @@ export function migrate(raw: unknown): ProjectDoc {
   if (version > PROJECT_VERSION) throw new UserError('err.projectNewer');
   if (version < 1) throw new UserError('err.projectUnknown');
   // v1 is current. Future: if (version === 1) raw = migrate1to2(raw) …
-  const s = mergeDefaults(defaultSettings(), raw.settings);
+  // Before STORY-47 there was no global time base: convert the mixed units of the saved values (not the defaults
+  // filled in below) to video seconds, so the project renders the same.
+  let settings: unknown = raw.settings;
+  if (isObj(settings) && settings.timeBase === undefined) {
+    const rs = structuredClone(settings);
+    const rd = rs.routeDisplay;
+    const routeBase: TimeBase = isObj(rd) && rd.timeBase === 'real' ? 'real' : 'video';
+    const speed = typeof rs.speed === 'number' && rs.speed > 0 ? rs.speed : 1;
+    upgradeLegacyTimes(rs as Partial<ProjectSettings>, routeBase, 'video', speed);
+    settings = { ...rs, timeBase: 'video' };
+  }
+  const s = mergeDefaults(defaultSettings(), settings);
   // Components: keep one per kind, defaults for missing kinds/keys.
   const byKind = new Map(
-    (Array.isArray(raw.settings && (raw.settings as Record<string, unknown>).components)
-      ? ((raw.settings as Record<string, unknown>).components as unknown[])
-      : []
-    )
+    (isObj(settings) && Array.isArray(settings.components) ? (settings.components as unknown[]) : [])
       .filter(isObj)
       .map((c) => [c.kind, c]),
   );

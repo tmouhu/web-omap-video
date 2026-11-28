@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-6](../EPIC-6-ux-and-project.md) · **Priority:** Must · **Labels:** `ui`, `ux`
 
 ## User story
+
 As a **user who is an orienteer, not a GIS or video expert**, I want **a clear, attractive interface that guides me from map to
 finished video**, so that **I get a good result the first time without reading a manual**.
 
 ## Acceptance criteria
+
 - [ ] Layout per [EN-16](../enablers/EN-16-ui-framework-design-system.md) / [EN-19](../enablers/EN-19-ux-research-and-design.md):
       top bar, **workflow rail**, central map stage with the exact video frame, contextual inspector panel, bottom timeline.
 - [ ] Workflow steps, each with a completion state (✓ / needs attention / optional):
@@ -25,7 +27,9 @@ finished video**, so that **I get a good result the first time without reading a
 - [ ] Meets the usability target of [EN-19](../enablers/EN-19-ux-research-and-design.md) and Lighthouse accessibility ≥ 95.
 
 ## Dependencies
+
 [EN-16](../enablers/EN-16-ui-framework-design-system.md), [EN-19](../enablers/EN-19-ux-research-and-design.md)
 
 ## Estimate
+
 TBD

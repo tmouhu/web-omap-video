@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-2](../EPIC-2-maps-and-coordinates.md) · **Priority:** Must · **Labels:** `map`, `georef`, `ui`
 
 ## User story
+
 As a **user with a map image that has no georeference** (scan, photo, PDF), I want to **place it on the background map by
 matching a few points**, so that **the map and my GPX line up**.
 
 ## Acceptance criteria
+
 - [ ] Split view: raster image on one side, background map (aerial or topographic) on the other. Each side can be panned,
       zoomed and rotated on its own. An overlay mode with adjustable transparency is also available.
 - [ ] The user adds **point pairs** by clicking the same feature on both sides (path crossing, building corner…).
@@ -27,11 +29,14 @@ matching a few points**, so that **the map and my GPX line up**.
 - [ ] All steps are undoable ([EN-15](../enablers/EN-15-project-model-and-persistence.md)).
 
 ## Open questions / refinement
+
 - Magnifier loupe while placing points (precise clicks on a high-DPI map)?
 - Automatic matching of map features to imagery: out of scope.
 
 ## Dependencies
+
 [STORY-13](./STORY-13-add-raster-map.md), [STORY-16](./STORY-16-background-layers.md), [EN-16](../enablers/EN-16-ui-framework-design-system.md)
 
 ## Estimate
+
 TBD

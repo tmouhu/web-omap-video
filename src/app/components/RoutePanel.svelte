@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dist, i18n, t } from '../i18n.svelte';
+  import { dist, i18n, secs, t } from '../i18n.svelte';
   import { decimalSep } from '../../lib/i18n/core';
   /** Route choices per leg (STORY-30) and when they are shown in the video (STORY-31). */
   import { app } from '../state.svelte';
@@ -135,40 +135,23 @@
     {t('routes.wholeLeg')}
   </label>
   {#if !app.routeDisplay.wholeLeg}
-    <div class="seg" role="group" aria-label={t('routes.timeBase')}>
-      <button
-        aria-pressed={app.routeDisplay.timeBase !== 'real'}
-        onclick={() => (app.routeDisplay.timeBase = 'video')}
-        data-testid="route-time-video"
-      >
-        {t('routes.videoTime')}
-      </button>
-      <button
-        aria-pressed={app.routeDisplay.timeBase === 'real'}
-        onclick={() => (app.routeDisplay.timeBase = 'real')}
-        data-testid="route-time-real"
-      >
-        {t('routes.realTime')}
-      </button>
-    </div>
-    <small class="muted">{t('routes.timeBaseHelp')}</small>
     <label class="field">
-      <span>{t('routes.hold', { s: app.routeDisplay.hold.toFixed(1) })}</span>
+      <span>{t('routes.hold', { s: secs(app.routeDisplay.hold, app.timeBase) })}</span>
       <input
         type="range"
         min="1"
-        max={app.routeDisplay.timeBase === 'real' ? 120 : 20}
+        max={app.timeBase === 'real' ? 120 : 20}
         step="0.5"
         bind:value={app.routeDisplay.hold}
         data-testid="route-hold"
       />
     </label>
     <label class="field">
-      <span>{t('routes.fade', { s: app.routeDisplay.fadeOut.toFixed(1) })}</span>
+      <span>{t('routes.fade', { s: secs(app.routeDisplay.fadeOut, app.timeBase) })}</span>
       <input
         type="range"
         min="0"
-        max={app.routeDisplay.timeBase === 'real' ? 20 : 4}
+        max={app.timeBase === 'real' ? 20 : 4}
         step="0.1"
         bind:value={app.routeDisplay.fadeOut}
       />

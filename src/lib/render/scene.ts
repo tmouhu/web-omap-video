@@ -12,7 +12,7 @@ import type { Track } from '../track/track';
 
 /** GPX tail and runner style (STORY-28/29). Sizes in CSS px. */
 export interface TrackStyle {
-  /** Tail: the last N seconds, everything since the leg started, or the whole route so far. */
+  /** Tail: the last N seconds (time-base seconds, STORY-47), everything since the leg started, or the whole route. */
   tailMode: 'seconds' | 'leg' | 'all';
   tailSeconds: number;
   colorMode: 'single' | 'pace';
@@ -24,8 +24,13 @@ export interface TrackStyle {
   showFuture: boolean;
   /** Route run before the tail, as a thin faint line. */
   showTravelled: boolean;
+  /** Position marker size (arrow, or the circle's diameter scale). */
   arrowSize: number;
   arrowColor: string;
+  /** Position marker shape (STORY-44). */
+  marker: 'arrow' | 'circle';
+  /** Circle marker: ring with a transparent centre instead of a filled disc. */
+  markerRing: boolean;
 }
 
 export const DEFAULT_TRACK_STYLE: TrackStyle = {
@@ -39,6 +44,8 @@ export const DEFAULT_TRACK_STYLE: TrackStyle = {
   showTravelled: true,
   arrowSize: 13,
   arrowColor: '#ff3d00',
+  marker: 'arrow',
+  markerRing: false,
 };
 
 /**
@@ -69,6 +76,8 @@ export interface SceneInput {
   style: SceneStyle;
   /** Course mode: start time of the shown leg (for "leg" tails). */
   legStartT?: number | null;
+  /** Track seconds per settings second (STORY-47): the tail length is in time-base seconds. Default 1. */
+  timeScale?: number;
   /** Course overprint, drawn between the map and the track. */
   course?: {
     course: Course;
@@ -206,7 +215,7 @@ function drawTrack(
 
   // Tail start time.
   let t0 = 0;
-  if (st.tailMode === 'seconds') t0 = Math.max(0, now - st.tailSeconds);
+  if (st.tailMode === 'seconds') t0 = Math.max(0, now - st.tailSeconds * (scene.timeScale ?? 1));
   else if (st.tailMode === 'leg') t0 = Math.max(0, Math.min(now, scene.legStartT ?? 0));
   const i0 = track.indexAt(t0);
   const startXY = T(...forward(scene.crsCode, track.positionAt(t0)));
@@ -253,7 +262,7 @@ function drawTrack(
   drawRunner(ctx, posXY[0], posXY[1], scene.heading, pr, st, T);
 }
 
-/** Navigation arrow (STORY-28) pointing along the grid heading, relative to the map rotation. */
+/** Position marker: navigation arrow (STORY-28) along the grid heading relative to the map rotation, or a circle (STORY-44). */
 function drawRunner(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -268,7 +277,24 @@ function drawRunner(
   ctx.shadowColor = 'rgba(0,0,0,0.35)';
   ctx.shadowBlur = 4 * pr;
   const s = st.arrowSize * pr;
-  if (heading === null) {
+  if (st.marker === 'circle') {
+    // Circle marker (STORY-44): about the arrow's visual size, centred on the position.
+    const r = 0.8 * s;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    if (st.markerRing) {
+      const w = 0.34 * s;
+      ctx.lineWidth = w + 2 * 2.2 * pr;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = w;
+      ctx.strokeStyle = st.arrowColor;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+  } else if (heading === null) {
     ctx.beginPath();
     ctx.arc(0, 0, s * 0.6, 0, Math.PI * 2);
   } else {

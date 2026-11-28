@@ -20,6 +20,8 @@ export interface ProjectScene {
   routes: RouteChoice[];
   /** Language of video texts (route length decimal separator). */
   videoLocale?: VideoLocale;
+  /** Track seconds per settings second (STORY-47 time base). Default 1. */
+  timeScale?: number;
 }
 
 export function sceneForFrame(fs: FrameState, p: ProjectScene): SceneInput {
@@ -40,6 +42,7 @@ export function sceneForFrame(fs: FrameState, p: ProjectScene): SceneInput {
     heading: fs.gridHeading,
     style: p.style,
     legStartT: fs.legStartT,
+    timeScale: p.timeScale ?? 1,
     course:
       p.course && p.courseStyle.visible
         ? { course: p.course, style: p.courseStyle, printScale: p.printScale, highlightLeg: leg }

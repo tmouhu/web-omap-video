@@ -38,7 +38,7 @@ function setup(wp: [number, number][], settings: Partial<CourseCameraSettings> =
   const tr = track(...wp);
   const c = course(...wp);
   const passings = matchCourse(tr, c);
-  const cam = new CourseCamera({
+  const input: ConstructorParameters<typeof CourseCamera>[0] = {
     track: tr,
     crsCode: CRS,
     course: c,
@@ -47,8 +47,9 @@ function setup(wp: [number, number][], settings: Partial<CourseCameraSettings> =
     speed,
     frame: FRAME,
     northRotation,
-  });
-  return { tr, c, passings, cam };
+  };
+  const cam = new CourseCamera(input);
+  return { tr, c, passings, cam, input };
 }
 const screen = (view: ReturnType<CourseCamera['viewAt']>['view'], p: { lat: number; lon: number }) =>
   makeTransform(view, FRAME.width, FRAME.height, 1)(...forward(CRS, p));
@@ -162,6 +163,51 @@ describe('transitions and approach zoom (STORY-25/27)', () => {
     expect(cam.tEnd[1]).toBeCloseTo(passings[1].t + 4, 6);
   });
 
+  it('instant leg change (STORY-45): one cut per leg change at passing + delay, smooth elsewhere', () => {
+    const { cam, passings, tr } = setup(wp, { legChange: 'instant', transitionDelay: 0.5, approachEnabled: true }, 2);
+    expect(cam.tStart[1]).toBeCloseTo(passings[1].t + 1, 6);
+    expect(cam.tEnd[1]).toBe(cam.tStart[1]);
+    const cuts = cam.tStart.filter((x) => Number.isFinite(x));
+    let jumps = 0;
+    let prev = cam.viewAt(0).view;
+    for (let t = 1 / 60; t <= tr.duration; t += 1 / 60) {
+      const v = cam.viewAt(t).view;
+      const jump =
+        Math.abs(lerpAngle(prev.rotation, v.rotation, 1) - prev.rotation) >= 0.05 ||
+        Math.abs(Math.log(v.resolution / prev.resolution)) >= 0.05 ||
+        Math.hypot(v.center[0] - prev.center[0], v.center[1] - prev.center[1]) / v.resolution >= 25;
+      if (jump) {
+        jumps++;
+        expect(cuts.some((c) => c > t - 1 / 60 && c <= t)).toBe(true);
+      }
+      prev = v;
+    }
+    expect(jumps).toBe(cuts.length);
+    // The cut lands on the next leg's own view.
+    const s = cam.tStart[2];
+    expect(cam.viewAt(s).legIndex).toBe(2);
+    expect(cam.viewAt(s).view).toEqual(cam.legView(2, s));
+  });
+
+  it('transition override (STORY-46): animates over the given track time, same frames outside the transition', () => {
+    const speed = 10;
+    const { cam: main, input } = setup(wp, { transitionDuration: 1.5 }, speed);
+    const clip = new CourseCamera({ ...input, transitionOverride: 1.5 });
+    expect(clip.tStart).toEqual(main.tStart);
+    expect(clip.tEnd).toEqual(main.tEnd);
+    const s = main.tStart[1];
+    expect(clip.tBlendEnd[1]).toBeCloseTo(s + 1.5, 6);
+    for (const t of [s - 2, s - 0.01, main.tEnd[1] + 0.01, main.tEnd[1] + 3]) {
+      expect(clip.viewAt(t).view).toEqual(main.viewAt(t).view);
+    }
+    // In the clip the move is half done at 0.75 s; in the main video it has barely started.
+    const mid = clip.viewAt(s + 0.75).view;
+    const A = main.legView(0, s);
+    expect(Math.abs(lerpAngle(A.rotation, mid.rotation, 1) - A.rotation)).toBeGreaterThan(
+      Math.abs(lerpAngle(A.rotation, main.viewAt(s + 0.75).view.rotation, 1) - A.rotation),
+    );
+  });
+
   it('approach zoom zooms in before the passing, within the zoom-in limit', () => {
     const { cam, passings } = setup(
       [
@@ -242,11 +288,11 @@ describe('overview after the finish uses map north', () => {
 describe('route display time base and route-aware framing', () => {
   const r = { ...DEFAULT_ROUTE_DISPLAY, fadeIn: 1, hold: 2, fadeOut: 2 };
 
-  it('real-time (1×) units ignore the playback speed', () => {
+  it('time scale: video seconds at 10× (scale 10) vs real seconds (scale 1)', () => {
     // 10× video time: hold of 2 video s = 20 track s; real time: 2 track s.
     expect(routeAlpha(10 + 10 + 15, 10, 1000, r, 10)).toBe(1);
-    expect(routeAlpha(10 + 1 + 2 + 1, 10, 1000, { ...r, timeBase: 'real' }, 10)).toBeCloseTo(0.5, 6);
-    expect(routeAlpha(10 + 6, 10, 1000, { ...r, timeBase: 'real' }, 10)).toBe(0);
+    expect(routeAlpha(10 + 1 + 2 + 1, 10, 1000, r, 1)).toBeCloseTo(0.5, 6);
+    expect(routeAlpha(10 + 6, 10, 1000, r, 1)).toBe(0);
   });
 
   // Leg 1 east 600 m; a route choice that first runs 500 m back west (the fit is limited by the leg's length).

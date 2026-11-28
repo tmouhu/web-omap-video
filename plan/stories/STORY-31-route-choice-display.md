@@ -3,11 +3,13 @@
 **Type:** Story · **Epic:** [EPIC-4](../EPIC-4-course-animation.md) · **Priority:** Must · **Labels:** `animation`, `route-choice`
 
 ## User story
+
 As a **viewer**, I want to **see the route choices of a leg, with their lengths, at the start of the leg and then have them fade
 away**, so that **I can compare the alternatives and then watch which one the runner took**.
 
 ## Acceptance criteria
-- [ ] Route choices of leg *i* appear when leg *i* starts (when the transition into the leg has ended; setting: "with the
+
+- [ ] Route choices of leg _i_ appear when leg _i_ starts (when the transition into the leg has ended; setting: "with the
       transition"), with a short fade-in (default 0.3 s).
 - [ ] They stay fully visible for a **user-defined display time** (default 6 s video time), then **fade out** over a
       user-defined fade duration (default 1 s). Both are settings in video seconds ([EN-14](../enablers/EN-14-animation-timeline-camera.md)).
@@ -28,7 +30,9 @@ away**, so that **I can compare the alternatives and then watch which one the ru
       "Keep visible for the whole leg" keeps them framed.
 
 ## Dependencies
+
 [STORY-30](./STORY-30-draw-route-choices.md), [STORY-24](./STORY-24-leg-oriented-view.md), [EN-14](../enablers/EN-14-animation-timeline-camera.md)
 
 ## Estimate
+
 TBD

@@ -3,17 +3,21 @@
 **Type:** Story · **Epic:** [EPIC-6](../EPIC-6-ux-and-project.md) · **Priority:** Could · **Labels:** `i18n`, `ui` · **Status:** Done (Nov 2026)
 
 ## User story
+
 As a **Finnish or international user**, I want **the UI and the video texts in my language with familiar number formats**,
 so that **the app and the video feel native**.
 
 ## Acceptance criteria
+
 - [x] UI available in English and Finnish; language follows the browser with a manual switch.
 - [x] Video texts (labels in components, overlays, "Start"/"Finish") use a separately chosen **video language**.
 - [x] Number formats follow the video locale (e.g. `1,24 km` in Finnish, `1.24 km` in English); thousands separator handled.
 - [x] All strings extracted (i18n library), no hard-coded text; pseudo-locale test for truncation.
 
 ## Dependencies
+
 [EN-16](../enablers/EN-16-ui-framework-design-system.md)
 
 ## Estimate
+
 TBD

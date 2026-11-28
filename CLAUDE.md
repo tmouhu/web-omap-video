@@ -78,6 +78,9 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
   loaded, else grid north (0). Used by the raster/track fit, paused/editing views, free mode without heading-up and the
   course overview (`Timeline`/`CourseCamera` `northRotation`). Never hard-code `setRotation(0)`.
 - Sizes in `drawScene` are CSS px × `pixelRatio` so preview and any video resolution look the same.
+- Stable zoom (`lib/map/stableZoom.ts`): video frames set the OL view to a quantised resolution and magnify the layers
+  (`.ol-layers` CSS scale in the preview, `composeOlCanvases(…, scale)` in export) – OL rounds tile positions, so
+  continuous zooms shimmered. The OL view resolution is NOT the frame's: use `currentViewState()` / `FrameState`.
 - Exports always stream to a file (`openExportTarget`): never build whole videos in memory (2 GB Blob limit hit at
   10 min 1080p).
 - Dev-only test hook: `window.__omv = { app, map(), forward }` (MapStage). E2E deletes `showSaveFilePicker` and
@@ -86,7 +89,9 @@ Run `npm test && npm run check && npm run test:e2e` before reporting work as don
   Never assign `app.track`. Anything keyed to "a new GPX was loaded" must compare `app.gpx`, not `app.track`.
 - Undoable changes call `app.pushHistory()` first (snapshot of course, GPX edits, passing overrides).
 - Manual passing times are absolute GPX-clock ms (`passingOverrides`); `passings` is derived (matchCourse).
-- User-facing animation durations are VIDEO seconds; convert with `speed` (track s = video s × speed).
+- User-facing display/animation durations are in the project's **time base** (`app.timeBase`, STORY-47: video or real
+  seconds); convert with `app.timeScale` (track s = value × timeScale; `timeScaleFor()` in `lib/project/timeBase.ts`).
+  New timed settings must be added to `timedFields`/`upgradeLegacyTimes` there. Measurement windows (pace) stay real s.
 - Paused "video view" (`app.followFrame`) applies the frame only on seeks/settings changes, never on data load.
 - Editor-only drawing (selection, track points, ranges) goes in `drawEditorMarks`, never in `drawScene`.
 - New persistent state must go into `ProjectDoc` (`toDoc`/`applyDoc`, `settings()`/`applySettings`) AND the autosave

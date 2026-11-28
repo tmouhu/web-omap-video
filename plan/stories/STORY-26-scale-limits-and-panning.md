@@ -3,14 +3,16 @@
 **Type:** Story · **Epic:** [EPIC-4](../EPIC-4-course-animation.md) · **Priority:** Must · **Labels:** `animation`, `camera`, `settings`
 
 ## User story
+
 As a **user**, I want to **set how far the animation may zoom in and out**, so that **the map stays readable on short legs
 and long legs alike**. When a long leg does not fit at the zoom-out limit, I want **the map to pan along with the runner**.
 
 ## Acceptance criteria
+
 - [ ] Two settings, shown as map scales 1:N with clear names (avoids the "large/small scale" confusion):
   - **Zoom-in limit** (largest scale, most detail), default 1:4 000
   - **Zoom-out limit** (smallest scale, least detail), default 1:15 000
-  The zoom-in limit must be a larger scale than the zoom-out limit (validated).
+    The zoom-in limit must be a larger scale than the zoom-out limit (validated).
 - [ ] The limits are **always respected**: leg framing, transitions, approach zoom and the overview never go past them.
       (The intro/outro overview may have its own limit, setting.)
 - [ ] **Too small to need zooming in further:** if the fitted scale for a short leg would be larger than the zoom-in limit, the
@@ -27,7 +29,9 @@ and long legs alike**. When a long leg does not fit at the zoom-out limit, I wan
       debug graph shows the scale per frame and where panning is active.
 
 ## Dependencies
+
 [STORY-24](./STORY-24-leg-oriented-view.md), [STORY-6](./STORY-6-playback-scale.md), [EN-14](../enablers/EN-14-animation-timeline-camera.md)
 
 ## Estimate
+
 TBD

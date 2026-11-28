@@ -3,13 +3,15 @@
 **Type:** Enabler (design) · **Epic:** [EPIC-6](../EPIC-6-ux-and-project.md) · **Priority:** Must · **Labels:** `ux`, `design`
 
 ## Summary
+
 The app combines GIS tasks (georeferencing, layers, CRS) with sports analysis (course, splits, route choices) and video
 production. To be **attractive, modern and easy to use** for orienteers who are not GIS experts, the workflow and screens
 must be designed and tested before the editors are built.
 
 ## Scope / acceptance criteria
-- [ ] Personas and key jobs, e.g. *an orienteer making a head cam video of their own race*, *a coach making a route-choice
-      analysis of a training session*, *a club media person making a race highlight*.
+
+- [ ] Personas and key jobs, e.g. _an orienteer making a head cam video of their own race_, _a coach making a route-choice
+      analysis of a training session_, _a club media person making a race highlight_.
 - [ ] User journey for the main flow: create project → add map → georeference → set course → load GPX → check matching →
       draw route choices → style → set export range → export.
 - [ ] Information architecture and wireframes for: app shell, each workflow step, timeline, export dialog, empty/error states.
@@ -21,7 +23,9 @@ must be designed and tested before the editors are built.
 - [ ] Findings turned into backlog changes.
 
 ## Dependencies
+
 None (start early, in parallel with the foundation enablers)
 
 ## Estimate
+
 TBD

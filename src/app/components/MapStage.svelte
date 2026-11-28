@@ -29,6 +29,7 @@
   import { drawEditorMarks, installTools, syncInteractions } from '../mapTools';
   import { isProjectFile, openProjectFile } from '../projects.svelte';
   import { composeOlCanvases } from '../../lib/map/compose';
+  import { stableResolution } from '../../lib/map/stableZoom';
   import { formatScale } from '../../lib/format';
   import { scaleForGroundResolution } from '../../lib/geo/geo';
 
@@ -122,14 +123,23 @@
     if (currentCrs && oc && or) {
       const ll = inverse(currentCrs, oc as Pt);
       center = forward(crs, ll);
-      resolution = (or * pointScale(crs, ll)) / pointScale(currentCrs, ll);
+      resolution = (or * pointScale(crs, ll)) / pointScale(currentCrs, ll) / displayScale;
     }
+    setDisplayScale(1);
     map!.setView(
       new View({ projection: crs, center, resolution, constrainResolution: false, smoothResolutionConstraint: false }),
     );
     map!.getView().on('change:center', () => {
       const c = map!.getView().getCenter();
       if (c) app.viewCenter = c as Pt;
+    });
+    watchResolution();
+  }
+
+  /** Any resolution change other than a video frame (fits, wheel/pinch zoom) is exact: drop the magnification. */
+  function watchResolution() {
+    map!.getView().on('change:resolution', () => {
+      if (!applyingFrame && displayScale !== 1) setDisplayScale(1);
     });
   }
 
@@ -245,6 +255,7 @@
       $state.snapshot(app.routeDisplay),
       app.courseModeEnabled,
       app.speed,
+      app.timeBase,
       app.frame.width,
       app.frame.height,
       app.followFrame,
@@ -332,6 +343,8 @@
   $effect(() => {
     void [
       app.style.showNorthArrow,
+      $state.snapshot(app.style.track),
+      app.timeScale,
       app.free.headingUp,
       app.georef.active,
       app.georef.pendingPixel,
@@ -383,7 +396,30 @@
     const center = view.getCenter();
     const resolution = view.getResolution();
     if (!center || !resolution) return null;
-    return { center: center as [number, number], resolution, rotation: view.getRotation() };
+    // The layers are magnified by `displayScale` (stable zoom): what is visible is the exact frame resolution.
+    return { center: center as [number, number], resolution: resolution / displayScale, rotation: view.getRotation() };
+  }
+
+  /**
+   * Stable zoom (lib/map/stableZoom.ts): while showing video frames, OL renders at a quantised resolution and the
+   * layers are magnified by this factor about the centre, so continuous zooms do not make the tiles shimmer.
+   */
+  let displayScale = 1;
+  let applyingFrame = false;
+  function setDisplayScale(s: number) {
+    displayScale = s;
+    const el = map?.getViewport()?.querySelector<HTMLElement>('.ol-layers');
+    if (el) el.style.transform = s === 1 ? '' : `scale(${s})`;
+  }
+  /** Back to an exact, unscaled view (before user interaction, so clicks map to the right place). */
+  function unscale() {
+    if (!map || displayScale === 1) return;
+    const view = map.getView();
+    const res = view.getResolution();
+    applyingFrame = true;
+    if (res) view.setResolution(res / displayScale);
+    applyingFrame = false;
+    setDisplayScale(1);
   }
 
   function drawOverlay() {
@@ -394,7 +430,12 @@
     if (!vs) return;
     const pr = overlayEl.width / app.frame.width;
     drawScene(ctx, overlayEl.width, overlayEl.height, pr, vs, previewScene());
+    // Editor marks use OL pixels of the (unscaled) view: magnify them like the layers (stable zoom).
+    ctx.save();
+    ctx.translate((overlayEl.width / 2) * (1 - displayScale), (overlayEl.height / 2) * (1 - displayScale));
+    ctx.scale(displayScale, displayScale);
     drawEditorMarks(ctx, map, pr);
+    ctx.restore();
     if (app.georef.active && app.raster) drawGeorefMarks(ctx, vs, pr);
   }
 
@@ -486,10 +527,14 @@
     if (!map || !tl) return;
     const fs = tl.frameStateAt(app.time, app.frame);
     const view = map.getView();
+    const stable = stableResolution(fs.view.resolution);
     view.cancelAnimations();
+    applyingFrame = true;
     view.setCenter(fs.view.center);
-    view.setResolution(fs.view.resolution);
+    view.setResolution(stable.resolution);
     view.setRotation(fs.view.rotation);
+    applyingFrame = false;
+    setDisplayScale(stable.scale);
     map.renderSync();
   }
 
@@ -501,6 +546,9 @@
       layers: [],
     });
     map.on('postrender', drawOverlay);
+    watchResolution();
+    map.getViewport()?.addEventListener('pointerdown', unscale, true);
+    map.getViewport()?.addEventListener('wheel', unscale, { capture: true, passive: true });
     const uninstallTools = installTools(map);
     map.on('singleclick', (e) => {
       if (!app.georef.active || !app.raster) return;
@@ -579,7 +627,7 @@
     ctx.fillStyle = '#ece8df';
     ctx.fillRect(0, 0, w, h);
     try {
-      composeOlCanvases(map, ctx, w / app.frame.width);
+      composeOlCanvases(map, ctx, w / app.frame.width, displayScale);
       ctx.drawImage(overlayEl, 0, 0, w, h);
       return c.toDataURL('image/jpeg', 0.72);
     } catch {
@@ -595,7 +643,8 @@
     const res = v?.getResolution();
     const c = v?.getCenter();
     if (!res || !c) return '';
-    return formatScale(scaleForGroundResolution(res / pointScale(app.crs.code, inverse(app.crs.code, c as Pt))));
+    const visible = res / displayScale;
+    return formatScale(scaleForGroundResolution(visible / pointScale(app.crs.code, inverse(app.crs.code, c as Pt))));
   });
   let viewTick = $state(0);
 

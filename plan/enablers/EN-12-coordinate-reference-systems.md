@@ -3,19 +3,21 @@
 **Type:** Enabler (architecture) · **Epic:** [EPIC-2](../EPIC-2-maps-and-coordinates.md) · **Priority:** Must · **Labels:** `tech`, `geo`, `crs`
 
 ## Summary
+
 Everything that is drawn (tiles, raster map, course, track, route choices) is placed in a **view CRS**: a planar
 coordinate system in metres. The view CRS is chosen per project:
 
-| Situation | View CRS |
-| --- | --- |
-| **Project located in Finland** (raster map, GPX or course centre inside Finland) – with or without a raster map | **EUREF-FIN / ETRS-TM35FIN (EPSG:3067)**, always |
-| Outside Finland, raster map added | **UTM** zone of the map centre (WGS84 UTM, EPSG:326xx / 327xx; ETRS89 UTM EPSG:258xx in Europe); if the raster's own CRS is UTM, that CRS (never resampled) |
-| Outside Finland, no raster map | **Web Mercator (EPSG:3857)**, so all common tile services can be used without reprojection |
-| Nothing loaded yet | TM35FIN (default start view over Finland with MapAnt) |
+| Situation                                                                                                       | View CRS                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Project located in Finland** (raster map, GPX or course centre inside Finland) – with or without a raster map | **EUREF-FIN / ETRS-TM35FIN (EPSG:3067)**, always                                                                                                            |
+| Outside Finland, raster map added                                                                               | **UTM** zone of the map centre (WGS84 UTM, EPSG:326xx / 327xx; ETRS89 UTM EPSG:258xx in Europe); if the raster's own CRS is UTM, that CRS (never resampled) |
+| Outside Finland, no raster map                                                                                  | **Web Mercator (EPSG:3857)**, so all common tile services can be used without reprojection                                                                  |
+| Nothing loaded yet                                                                                              | TM35FIN (default start view over Finland with MapAnt)                                                                                                       |
 
 Selection UX is in [STORY-15](../stories/STORY-15-view-crs-selection.md).
 
 ## Scope / acceptance criteria
+
 - [ ] `Crs` interface: `forward(lonLat) → [x, y]`, `inverse([x, y]) → lonLat`, `pointScale(lonLat)`,
       `gridConvergence(lonLat)`, `code`, `name`, `units = 'm'`.
 - [ ] Implementations with `proj4` (bundled definitions): EPSG:4326, 3857, 3067, WGS84 UTM 32601–32660 / 32701–32760,
@@ -33,6 +35,7 @@ Selection UX is in [STORY-15](../stories/STORY-15-view-crs-selection.md).
       World Magnetic Model, or the declination stored with the map).
 
 ## Technical notes
+
 - In a TM35/UTM view, "up" at rotation 0 is **grid north**, which differs from true north by the grid convergence
   (a few degrees at the edges of the zone). The north arrow overlay ([STORY-8](../stories/STORY-8-map-overlays.md)) must use
   the correct one.
@@ -40,10 +43,13 @@ Selection UX is in [STORY-15](../stories/STORY-15-view-crs-selection.md).
   north arrow and free-mode north-up.
 
 ## Decision
+
 - Finnish projects always use TM35FIN (product owner, Nov 2026). This also gives MapAnt's best-quality TM35 service.
 
 ## Dependencies
+
 [EN-1](./EN-1-geo-math.md)
 
 ## Estimate
+
 TBD

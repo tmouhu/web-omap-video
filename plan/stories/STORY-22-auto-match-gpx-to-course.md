@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-3](../EPIC-3-course-and-gpx.md) · **Priority:** Must · **Labels:** `course`, `gpx`, `algorithm`
 
 ## User story
+
 As an **orienteer**, I want **the app to find when I was at the start, each control and the finish**,
 so that **the leg-by-leg animation works without manual work**.
 
 ## Acceptance criteria
+
 - [ ] Runs automatically when both a course and a GPX exist, and again after course or GPX edits (unless the user has made
       manual overrides – those are kept, see [STORY-23](./STORY-23-adjust-control-times.md)).
 - [ ] For each control in course order, the passing time is the time of the **closest approach** within a search radius
@@ -26,7 +28,9 @@ so that **the leg-by-leg animation works without manual work**.
 - [ ] Runs in < 200 ms for a 2 h track and 40 controls.
 
 ## Dependencies
+
 [STORY-18](./STORY-18-set-course.md), [STORY-2](./STORY-2-load-gpx.md), [EN-4](../enablers/EN-4-track-model-and-heading.md)
 
 ## Estimate
+
 TBD

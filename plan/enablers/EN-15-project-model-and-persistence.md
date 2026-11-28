@@ -3,10 +3,12 @@
 **Type:** Enabler (architecture) · **Epic:** [EPIC-6](../EPIC-6-ux-and-project.md) · **Priority:** Must · **Labels:** `tech`, `data`
 
 ## Summary
+
 A user now invests real work in a video: georeferencing, course setting, GPX fixes, split adjustments, route choices and
 styling. All of it must live in one **versioned project document** with undo/redo and safe local persistence.
 
 ## Scope / acceptance criteria
+
 - [ ] Typed, versioned schema (e.g. validated with Zod) containing:
       map layers and settings; raster map (blob reference) and its georeference; view CRS; course; original GPX +
       **edit operations** (non-destructive, [STORY-21](../stories/STORY-21-gpx-editor.md)); control passing times
@@ -22,7 +24,9 @@ styling. All of it must live in one **versioned project document** with undo/red
 - [ ] Storage quota handling: show usage, warn near the quota, call `navigator.storage.persist()`.
 
 ## Dependencies
+
 [EN-7](./EN-7-project-setup-ci.md)
 
 ## Estimate
+
 TBD

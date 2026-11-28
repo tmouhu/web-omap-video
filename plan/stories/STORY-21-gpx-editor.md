@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-3](../EPIC-3-course-and-gpx.md) · **Priority:** Must · **Labels:** `gpx`, `editor`
 
 ## User story
+
 As an **orienteer**, I want to **fix the obvious GPS errors in my track** (the line goes through a lake, cuts a corner or
 is shifted from the path I ran), so that **the video shows the route I actually ran**.
 
 ## Acceptance criteria
+
 - [ ] GPX edit mode with the track drawn with its points visible at large scales. A **time/pace/HR chart** below the map is
       linked to the map (hover/selection highlights in both).
 - [ ] **Move points**: drag a single point; drag with a "soft brush" radius that moves neighbouring points with falloff.
@@ -25,7 +27,9 @@ is shifted from the path I ran), so that **the video shows the route I actually 
 - [ ] Export the edited track as GPX (extensions such as HR kept).
 
 ## Dependencies
+
 [STORY-2](./STORY-2-load-gpx.md), [EN-4](../enablers/EN-4-track-model-and-heading.md), [EN-15](../enablers/EN-15-project-model-and-persistence.md), [EN-16](../enablers/EN-16-ui-framework-design-system.md)
 
 ## Estimate
+
 TBD (candidate for splitting: basic edits / redraw / snap & outliers)

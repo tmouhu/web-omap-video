@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-4](../EPIC-4-course-animation.md) · **Priority:** Should · **Labels:** `animation`, `camera`
 
 ## User story
+
 As an **orienteer**, I want **the map to zoom in as the runner approaches the control**, so that **the viewer can see the
 control "taking" (the final approach and the punch) in detail, as in the head cam**.
 
 ## Acceptance criteria
+
 - [ ] Setting on/off (default on) with:
   - **Trigger**: time before the passing time (default 10 s track time) or distance to the control (default 60 m); time-based
     is the default because it is smooth and deterministic.
@@ -20,7 +22,9 @@ control "taking" (the final approach and the punch) in detail, as in the head ca
 - [ ] Can be turned off per control (e.g. for spectator controls or the finish).
 
 ## Dependencies
+
 [STORY-24](./STORY-24-leg-oriented-view.md), [STORY-26](./STORY-26-scale-limits-and-panning.md)
 
 ## Estimate
+
 TBD

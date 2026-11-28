@@ -3,10 +3,12 @@
 **Type:** Story · **Epic:** [EPIC-6](../EPIC-6-ux-and-project.md) · **Priority:** Must · **Labels:** `settings`, `ui`, `animation`
 
 ## User story
+
 As a **user**, I want **all animation and style settings in one well-organised place, and to save my favourite setup as a
 preset**, so that **all my videos look consistent with little effort**.
 
 ## Acceptance criteria
+
 - [ ] Settings grouped as:
   - **Camera:** zoom-in / zoom-out limits ([STORY-26](./STORY-26-scale-limits-and-panning.md)), leg margin
     ([STORY-24](./STORY-24-leg-oriented-view.md)), transition delay/duration/easing ([STORY-25](./STORY-25-leg-transitions.md)),
@@ -22,7 +24,9 @@ preset**, so that **all my videos look consistent with little effort**.
 - [ ] Settings are validated (e.g. zoom-in limit must be a larger scale than zoom-out limit) with inline messages.
 
 ## Dependencies
+
 [EN-15](../enablers/EN-15-project-model-and-persistence.md), [STORY-37](./STORY-37-app-shell-and-workflow.md)
 
 ## Estimate
+
 TBD

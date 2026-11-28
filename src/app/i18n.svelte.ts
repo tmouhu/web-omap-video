@@ -61,3 +61,15 @@ export function dist(m: number): string {
 export function int(n: number): string {
   return Math.round(n).toLocaleString(i18n.locale === 'fi' ? 'fi' : 'en');
 }
+
+/**
+ * A duration in the project's time base (STORY-47) with its unit, e.g. `1.5 s (video)` / `20 s (real)`.
+ * One decimal unless whole; `signed` adds a + for positive values.
+ */
+export function secs(v: number, base: 'video' | 'real', signed = false): string {
+  const whole = Math.abs(v - Math.round(v)) < 1e-6;
+  let n = whole ? String(Math.round(v)) : v.toFixed(1);
+  if (decimalSep(i18n.locale) === ',') n = n.replace('.', ',');
+  if (signed && v >= 0) n = `+${n}`;
+  return t(base === 'real' ? 'unit.secReal' : 'unit.secVideo', { s: n });
+}

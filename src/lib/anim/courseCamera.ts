@@ -7,12 +7,15 @@
  * - Scale limits (STORY-26): the fit is clamped to [zoom-in limit, zoom-out limit]. If the leg does not fit at the
  *   zoom-out limit, the camera pans with the (time-smoothed) runner inside the leg's bounding box.
  * - Transitions (STORY-25): rotation (short way), log-resolution and centre are eased from the previous leg's view
- *   to the next one; time keeps running.
+ *   to the next one; time keeps running. With an instant leg change (STORY-45) the view cuts in one frame.
+ * - Real-time transition clips (STORY-46): `transitionOverride` animates the leg changes over a different (track-time)
+ *   duration while everything else – the schedule, route display, approach zoom – stays as in the main video.
  * - Approach zoom (STORY-27): before a passing the view zooms towards the target control and the runner.
  * - Progressive leg zoom (STORY-42, optional): the leg view is fitted to the route still to run (runner → target
  *   passing, as actually run) plus the target, zooming in continuously and never out; replaces the approach zoom.
  *
- * All durations given in VIDEO seconds are converted to track seconds with `speed`.
+ * Durations in the settings are in the project's time base (STORY-47) and converted to track seconds with
+ * `timeScale` (track s per settings second); internal smoothing constants are video seconds (× `speed`).
  */
 import { forward } from '../geo/crs';
 import { groundResolutionForScale, type LatLon } from '../geo/geo';
@@ -22,13 +25,19 @@ import type { Passing } from '../course/match';
 import type { Track } from '../track/track';
 import type { RouteDisplaySettings, ViewState } from './timeline';
 
-/** Track seconds per display-time second: video time (× speed) or real time (1×). */
-export const routeTimeScale = (r: RouteDisplaySettings, speed: number) => (r.timeBase === 'real' ? 1 : speed);
-
-/** Route-choice opacity: fade in at `start`, hold, fade out; never past the end of the leg. */
-export function routeAlpha(t: number, start: number, legEnd: number, r: RouteDisplaySettings, speed: number): number {
+/**
+ * Route-choice opacity: fade in at `start`, hold, fade out; never past the end of the leg.
+ * `timeScale`: track seconds per settings second (STORY-47).
+ */
+export function routeAlpha(
+  t: number,
+  start: number,
+  legEnd: number,
+  r: RouteDisplaySettings,
+  timeScale: number,
+): number {
   if (!Number.isFinite(start) || t < start || t >= legEnd) return 0;
-  const k = routeTimeScale(r, speed);
+  const k = timeScale;
   const fi = Math.max(1e-6, r.fadeIn * k);
   const x = t - start;
   if (x < fi) return x / fi;
@@ -49,15 +58,17 @@ export interface CourseCameraSettings {
   /** Margin around the leg content: fixed CSS px (symbols) + fraction of the frame's short side. */
   marginPx: number;
   marginFraction: number;
-  /** Transition start relative to the passing (video s; may be negative) and its length (video s). */
+  /** Leg change: animated transition (STORY-25) or an instant cut (STORY-45). */
+  legChange: 'animated' | 'instant';
+  /** Transition start (or cut) relative to the passing (s; may be negative) and its length (s). */
   transitionDelay: number;
   transitionDuration: number;
   easing: Easing;
   approachEnabled: boolean;
-  /** Approach zoom starts this many TRACK seconds before the passing. */
+  /** Approach zoom starts this many seconds before the passing. */
   approachSeconds: number;
   approachScale: number;
-  /** Length of the zoom-in itself (video s). */
+  /** Length of the zoom-in itself (s). */
   approachDuration: number;
   /** Runner kept inside this central fraction of the frame while panning. */
   panBox: number;
@@ -76,6 +87,7 @@ export const DEFAULT_COURSE_CAMERA: CourseCameraSettings = {
   zoomOutLimit: 15000,
   marginPx: 22,
   marginFraction: 0.06,
+  legChange: 'animated',
   transitionDelay: 0.5,
   transitionDuration: 1.5,
   easing: 'sine',
@@ -151,6 +163,8 @@ export interface CourseCameraInput {
   settings: CourseCameraSettings;
   /** Playback/export speed (track seconds per video second). */
   speed: number;
+  /** Track seconds per settings second (STORY-47 time base); defaults to `speed` (video seconds). */
+  timeScale?: number;
   /** Frame size in CSS px. */
   frame: { width: number; height: number };
   /** Extra points to keep in view per leg (route choices), by leg index. */
@@ -162,6 +176,12 @@ export interface CourseCameraInput {
    * and zooms to the leg itself (GPX, start, target) as they fade out; without it they are always included.
    */
   routeDisplay?: RouteDisplaySettings;
+  /**
+   * Real-time transition clips (STORY-46): animate each leg change (and the overview after the finish) over this
+   * many TRACK seconds instead. The schedule (start times, settled times) is unchanged, so the frames outside the
+   * animation equal the main video's frames.
+   */
+  transitionOverride?: number;
 }
 
 export interface CameraState {
@@ -184,6 +204,12 @@ export class CourseCamera {
   /** Transition start/end (track s) INTO leg i (index 0: −Infinity). */
   readonly tStart: number[];
   readonly tEnd: number[];
+  /** End (track s) of the camera animation into leg i: `tEnd`, or shorter/longer with `transitionOverride`. */
+  readonly tBlendEnd: number[];
+  /** Transition length in track seconds as scheduled (0 for an instant leg change). */
+  readonly transitionTrack: number;
+  /** Track seconds per settings second. */
+  readonly timeScale: number;
   private readonly resMin: number;
   private readonly resMax: number;
   private readonly rot2: (xy: [number, number], rot: number, origin: [number, number]) => [number, number];
@@ -216,8 +242,11 @@ export class CourseCamera {
 
     // Transition schedule (in track seconds).
     const n = this.legs.length;
-    const D = settings.transitionDuration * speed;
-    const delay = settings.transitionDelay * speed;
+    const ts = i.timeScale ?? speed;
+    this.timeScale = ts;
+    const D = settings.legChange === 'instant' ? 0 : settings.transitionDuration * ts;
+    this.transitionTrack = D;
+    const delay = settings.transitionDelay * ts;
     this.tStart = new Array(n).fill(-Infinity);
     this.tEnd = new Array(n).fill(-Infinity);
     for (let li = 1; li < n; li++) {
@@ -229,9 +258,33 @@ export class CourseCamera {
     for (let li = 1; li + 1 < n; li++) {
       if (this.tEnd[li] > this.tStart[li + 1]) this.tEnd[li] = Math.max(this.tStart[li], this.tStart[li + 1]);
     }
+    const ov = i.transitionOverride;
+    this.tBlendEnd = this.tEnd.map((e, li) =>
+      ov === undefined || li === 0 ? e : Math.min(this.tStart[li] + Math.max(0, ov), this.tStart[li + 1] ?? Infinity),
+    );
 
     this.overview = settings.afterFinish === 'overview' ? this.planOverview(pts) : null;
     void frame;
+  }
+
+  /**
+   * The camera moves between views (STORY-46 clips): for each leg change and the overview after the finish, its
+   * start, the end of the scheduled move and the end of the actual (possibly overridden) animation, in track s.
+   */
+  moves(): { legIndex: number; start: number; end: number; animEnd: number }[] {
+    const out = [];
+    for (let li = 1; li < this.legs.length; li++)
+      out.push({ legIndex: li, start: this.tStart[li], end: this.tEnd[li], animEnd: this.tBlendEnd[li] });
+    if (this.overview) {
+      const s = this.legs[this.legs.length - 1].t1 + this.i.settings.transitionDelay * this.timeScale;
+      out.push({
+        legIndex: this.legs.length,
+        start: s,
+        end: s + this.transitionTrack,
+        animEnd: s + (this.i.transitionOverride ?? this.transitionTrack),
+      });
+    }
+    return out;
   }
 
   private margins(): { mx: number; my: number } {
@@ -331,17 +384,18 @@ export class CourseCamera {
     const r = this.i.routeDisplay;
     if (this.legs[li] === this.coreLegs[li]) return 0; // no route choices on this leg
     if (!r || r.wholeLeg) return 1;
-    const k = routeTimeScale(r, this.i.speed);
+    const k = this.timeScale;
     const foStart = this.routeShownAt(li) + (r.fadeIn + r.hold) * k;
     if (t <= foStart) return 1;
-    const z = Math.max(r.fadeOut * k, this.i.settings.transitionDuration * this.i.speed, 1e-6);
+    const z = Math.max(r.fadeOut * k, this.transitionTrack, 1e-6);
     return 1 - EASINGS[this.i.settings.easing](clamp01((t - foStart) / z));
   }
 
   /** The leg's own view at time t (route framing + pan + approach zoom), without transitions. */
   legView(li: number, t: number): ViewState {
     const L = this.legs[li];
-    const { settings, speed } = this.i;
+    const { settings } = this.i;
+    const ts = this.timeScale;
     const w = this.routeFraming(li, t);
     const progressive = settings.legZoom === 'target';
     const coreView = () => (progressive ? this.progressiveView(li, t) : this.panView(this.coreLegs[li], li, t));
@@ -355,9 +409,10 @@ export class CourseCamera {
 
     // Approach zoom towards the target control (not with the progressive zoom: they would fight).
     if (settings.approachEnabled && !progressive) {
-      const a0 = Math.max(L.t1 - settings.approachSeconds, this.tEnd[li] ?? -Infinity, L.t0);
-      const dur = Math.max(1e-6, settings.approachDuration * speed);
-      if (L.t1 - a0 > settings.approachSeconds * 0.4 && t > a0) {
+      const before = settings.approachSeconds * ts;
+      const a0 = Math.max(L.t1 - before, this.tEnd[li] ?? -Infinity, L.t0);
+      const dur = Math.max(1e-6, settings.approachDuration * ts);
+      if (L.t1 - a0 > before * 0.4 && t > a0) {
         const e = EASINGS[settings.easing](clamp01((t - a0) / dur));
         const k = pointScale(crsCode, this.i.track.center());
         const target = Math.min(res, Math.max(this.resMin, groundResolutionForScale(settings.approachScale) * k));
@@ -542,15 +597,16 @@ export class CourseCamera {
       legSettledAt: li === 0 ? -Infinity : this.tEnd[li],
       legEndsAt: li + 1 < n ? this.tStart[li + 1] : Infinity,
     });
-    if (li > 0 && t < this.tEnd[li]) {
+    const end = this.tBlendEnd[li];
+    if (li > 0 && t < end) {
       const A = this.legView(li - 1, Math.min(t, this.tStart[li]));
-      const B = this.legView(li, this.tEnd[li]);
-      return state(this.blend(A, B, (t - this.tStart[li]) / Math.max(1e-6, this.tEnd[li] - this.tStart[li])));
+      const B = this.legView(li, end);
+      return state(this.blend(A, B, (t - this.tStart[li]) / Math.max(1e-6, end - this.tStart[li])));
     }
     const last = this.legs[n - 1];
     if (this.overview && li === n - 1 && t > last.t1) {
-      const s = last.t1 + this.i.settings.transitionDelay * this.i.speed;
-      const D = this.i.settings.transitionDuration * this.i.speed;
+      const s = last.t1 + this.i.settings.transitionDelay * this.timeScale;
+      const D = this.i.transitionOverride ?? this.transitionTrack;
       const A = this.legView(li, last.t1);
       const B: ViewState = this.overview;
       return state(t <= s ? A : this.blend(A, B, (t - s) / Math.max(1e-6, D)));
