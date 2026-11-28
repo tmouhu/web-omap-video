@@ -3,6 +3,7 @@
   /** Camera (free mode / leg-by-leg course mode, STORY-24..27) and runner + tail style (STORY-28/29). */
   import { app, SCALE_PRESETS } from '../state.svelte';
   import { courseProblems } from '../../lib/course/course';
+  import { durationRange } from '../../lib/project/timeBase';
 
   const courseReady = $derived(!!app.passings && courseProblems(app.course).length === 0);
   // Derived: presets and opened projects replace these objects.
@@ -10,8 +11,8 @@
   let advanced = $state(false);
   const st = $derived(app.style.track);
   const tb = $derived(app.timeBase);
-  /** Slider ranges: real seconds at a high speed need a longer range (values are converted when switching). */
-  const k = $derived(tb === 'real' ? Math.max(1, app.speed) : 1);
+  /** Slider range of a duration in the project's time base (video-second range given). */
+  const dr = (min: number, max: number, step: number) => durationRange({ min, max, step }, app.timeBase, app.speed);
 
   function scaleInput(e: Event, set: (v: number) => void) {
     const v = +(e.currentTarget as HTMLInputElement).value;
@@ -116,14 +117,7 @@
     {:else}
       <label class="field">
         <span>{t('cam.turnDuration', { s: secs(cam.transitionDuration, tb) })}</span>
-        <input
-          type="range"
-          min={0.3 * k}
-          max={4 * k}
-          step={0.1 * k}
-          bind:value={cam.transitionDuration}
-          disabled={app.locked}
-        />
+        <input type="range" {...dr(0.3, 4, 0.1)} bind:value={cam.transitionDuration} disabled={app.locked} />
       </label>
     {/if}
     {#if advanced}
@@ -135,14 +129,7 @@
         <span>
           {t(cam.legChange === 'instant' ? 'cam.cutAt' : 'cam.turnStarts', { s: secs(cam.transitionDelay, tb, true) })}
         </span>
-        <input
-          type="range"
-          min={-2 * k}
-          max={3 * k}
-          step={0.1 * k}
-          bind:value={cam.transitionDelay}
-          disabled={app.locked}
-        />
+        <input type="range" {...dr(-2, 3, 0.1)} bind:value={cam.transitionDelay} disabled={app.locked} />
       </label>
       {#if cam.legChange !== 'instant'}
         <div class="seg" role="group" aria-label={t('cam.easing')}>
@@ -229,14 +216,7 @@
       <div class="grid2">
         <label class="field">
           <span>{t('cam.approachStarts', { s: secs(cam.approachSeconds, tb) })}</span>
-          <input
-            type="range"
-            min={0.5}
-            max={40 * k}
-            step={0.5}
-            bind:value={cam.approachSeconds}
-            disabled={app.locked}
-          />
+          <input type="range" {...dr(0.5, 40, 0.5)} bind:value={cam.approachSeconds} disabled={app.locked} />
         </label>
         <label class="field">
           <span>{t('cam.zoomTo')}</span>
@@ -317,9 +297,7 @@
         <span>{t('cam.rotationSmoothing', { s: secs(app.free.rotationSmoothing, tb) })}</span>
         <input
           type="range"
-          min="0"
-          max={5 * k}
-          step={0.1 * k}
+          {...dr(0, 5, 0.1)}
           bind:value={app.free.rotationSmoothing}
           disabled={app.locked}
           data-testid="rotation-smoothing"
@@ -348,7 +326,7 @@
   {#if st.tailMode === 'seconds'}
     <label class="field">
       <span>{t('run.tailSeconds', { s: secs(st.tailSeconds, tb) })}</span>
-      <input type="range" min="1" max={300 * k} step="1" bind:value={st.tailSeconds} data-testid="tail-seconds" />
+      <input type="range" {...dr(1, 300, 1)} bind:value={st.tailSeconds} data-testid="tail-seconds" />
     </label>
   {/if}
   <div class="seg" role="group" aria-label={t('run.tailColour')}>

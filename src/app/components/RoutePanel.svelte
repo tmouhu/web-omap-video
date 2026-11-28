@@ -5,7 +5,10 @@
   import { app } from '../state.svelte';
   import { isValidCourse, legLabel } from '../../lib/course/course';
   import { formatRouteLength, ROUTE_COLORS, routeLength, routesForLeg } from '../../lib/course/routes';
+  import { durationRange } from '../../lib/project/timeBase';
 
+  /** Slider range of a duration in the project's time base (video-second range given). */
+  const dr = (min: number, max: number, step: number) => durationRange({ min, max, step }, app.timeBase, app.speed);
   const c = $derived(app.course);
   const valid = $derived(isValidCourse(c));
   const legCount = $derived(c ? Math.max(0, c.points.length - 1) : 0);
@@ -137,24 +140,11 @@
   {#if !app.routeDisplay.wholeLeg}
     <label class="field">
       <span>{t('routes.hold', { s: secs(app.routeDisplay.hold, app.timeBase) })}</span>
-      <input
-        type="range"
-        min="1"
-        max={app.timeBase === 'real' ? 120 : 20}
-        step="0.5"
-        bind:value={app.routeDisplay.hold}
-        data-testid="route-hold"
-      />
+      <input type="range" {...dr(1, 20, 0.5)} bind:value={app.routeDisplay.hold} data-testid="route-hold" />
     </label>
     <label class="field">
       <span>{t('routes.fade', { s: secs(app.routeDisplay.fadeOut, app.timeBase) })}</span>
-      <input
-        type="range"
-        min="0"
-        max={app.timeBase === 'real' ? 20 : 4}
-        step="0.1"
-        bind:value={app.routeDisplay.fadeOut}
-      />
+      <input type="range" {...dr(0, 4, 0.1)} bind:value={app.routeDisplay.fadeOut} />
     </label>
   {/if}
   <small class="muted">{t('routes.note')}</small>

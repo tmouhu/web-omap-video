@@ -66,3 +66,23 @@ export function upgradeLegacyTimes<T extends Partial<Timed>>(
     conv(c?.options, ['splitShow', 'splitShowFinish', 'splitFadeIn', 'splitFadeOut'], 'video');
   return s;
 }
+
+export interface SliderRange {
+  min: number;
+  max: number;
+  step: number;
+}
+
+/**
+ * Slider range of a duration setting in the project's time base. `video` is the range in video seconds. With real
+ * seconds the upper end (and a negative lower end) grows with the speed, so the same on-screen times stay reachable,
+ * but a positive minimum stays as small as in video seconds – short real-time durations remain possible. The step
+ * stays the same, so values converted from video seconds (× speed) stay on the slider's grid.
+ */
+export function durationRange(video: SliderRange, base: TimeBase, speed: number): SliderRange {
+  if (base === 'video') return video;
+  const k = Math.max(1, speed);
+  const max = video.max * k;
+  const min = video.min < 0 ? video.min * k : video.min;
+  return { min, max, step: video.step };
+}

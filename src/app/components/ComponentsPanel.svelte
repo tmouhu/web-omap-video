@@ -3,11 +3,12 @@
   import { LOCALES } from '../../lib/i18n/core';
   /** Data component videos (STORY-32..34): enable, size, style, kind options, live preview at the playhead. */
   import { app } from '../state.svelte';
+  import { durationRange } from '../../lib/project/timeBase';
   import { COMPONENT_META, drawComponent, isAvailable, type ComponentConfig } from '../../lib/components/components';
 
   const canvases: Record<string, HTMLCanvasElement> = {};
-  /** Slider range factor: real seconds at a high speed (STORY-47). */
-  const rk = $derived(app.timeBase === 'real' ? Math.max(1, app.speed) : 1);
+  /** Slider range of a duration in the project's time base (video-second range given). */
+  const dr = (min: number, max: number, step: number) => durationRange({ min, max, step }, app.timeBase, app.speed);
 
   // Live previews: redraw when the playhead, data or any component setting changes.
   $effect(() => {
@@ -171,19 +172,19 @@
             {:else if c.kind === 'splits'}
               <label class="field">
                 <span>{t('dv.splitShow', { s: secs(c.options.splitShow, app.timeBase) })}</span>
-                <input type="range" min="1" max={20 * rk} step={0.5 * rk} bind:value={c.options.splitShow} />
+                <input type="range" {...dr(1, 20, 0.5)} bind:value={c.options.splitShow} />
               </label>
               <label class="field">
                 <span>{t('dv.splitShowFinish', { s: secs(c.options.splitShowFinish, app.timeBase) })}</span>
-                <input type="range" min="1" max={30 * rk} step={0.5 * rk} bind:value={c.options.splitShowFinish} />
+                <input type="range" {...dr(1, 30, 0.5)} bind:value={c.options.splitShowFinish} />
               </label>
               <label class="field">
                 <span>{t('dv.fadeIn', { s: secs(c.options.splitFadeIn, app.timeBase) })}</span>
-                <input type="range" min="0" max={2 * rk} step={0.1 * rk} bind:value={c.options.splitFadeIn} />
+                <input type="range" {...dr(0, 2, 0.1)} bind:value={c.options.splitFadeIn} />
               </label>
               <label class="field">
                 <span>{t('dv.fadeOut', { s: secs(c.options.splitFadeOut, app.timeBase) })}</span>
-                <input type="range" min="0" max={3 * rk} step={0.1 * rk} bind:value={c.options.splitFadeOut} />
+                <input type="range" {...dr(0, 3, 0.1)} bind:value={c.options.splitFadeOut} />
               </label>
               <label class="field">
                 <span>{t('dv.keyColor')}</span>

@@ -5,7 +5,7 @@ import { appendPoint, emptyCourse, finishAtLast } from '../src/lib/course/course
 import { matchCourse } from '../src/lib/course/match';
 import { presetForProject, BUILTIN_PRESETS } from '../src/lib/project/presets';
 import { defaultSettings, migrate, type ProjectSettings } from '../src/lib/project/project';
-import { convertSeconds, convertTimedSettings, timeScaleFor } from '../src/lib/project/timeBase';
+import { convertSeconds, convertTimedSettings, durationRange, timeScaleFor } from '../src/lib/project/timeBase';
 import { Track } from '../src/lib/track/track';
 import { pt } from './helpers';
 
@@ -120,5 +120,22 @@ describe('time base (STORY-47)', () => {
     const own = presetForProject({ timeBase: 'real', courseCamera: { transitionDuration: 10 } as never }, 'video', 5);
     expect(own.courseCamera!.transitionDuration).toBe(2);
     expect(sprint.settings.courseCamera!.approachSeconds).toBe(6); // not mutated
+  });
+});
+
+describe('duration slider ranges (STORY-47)', () => {
+  const turn = { min: 0.3, max: 4, step: 0.1 };
+  it('video seconds: unchanged', () => {
+    expect(durationRange(turn, 'video', 30)).toEqual(turn);
+  });
+  it('real seconds: the minimum stays small, the maximum grows with the speed', () => {
+    const r = durationRange(turn, 'real', 30);
+    expect(r.min).toBe(0.3);
+    expect(r.max).toBe(120);
+    expect(r.step).toBe(0.1); // converted values (1.5 video s × 30 = 45) stay on the grid 0.3 + n·0.1
+    expect(durationRange(turn, 'real', 1)).toEqual({ min: 0.3, max: 4, step: 0.1 });
+    expect(durationRange({ min: -2, max: 3, step: 0.1 }, 'real', 10)).toEqual({ min: -20, max: 30, step: 0.1 });
+    // Slower than 1×: never narrower than the video range.
+    expect(durationRange(turn, 'real', 0.5).max).toBe(4);
   });
 });
