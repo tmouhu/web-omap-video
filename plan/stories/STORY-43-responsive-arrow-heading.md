@@ -1,7 +1,7 @@
 # STORY-43: Responsive arrow heading – the arrow turns where the runner turns
 
 **Type:** Story · **Epic:** [EPIC-4](../EPIC-4-course-animation.md) · **Priority:** Should · **Labels:** `rendering`, `marker`,
-`gpx`, `bug` · **Status:** approved (Nov 2026), implemented and then **reverted** (Nov 2026, product owner) – the code was removed; the arrow uses the EN-4 heading (30 m / 1.5 s) again
+`gpx`, `bug` · **Status:** approved (Nov 2026), implemented (reverted once while hunting a map shimmer that turned out to be older; restored)
 
 ## User story
 
@@ -47,13 +47,13 @@ to `drawScene`. The setting is exposed as **arrow responsiveness** so users with
 
 ## Acceptance criteria
 
-- [ ] The arrow uses its own heading series; the free-mode camera rotation is unchanged (same frames as before for the map).
-- [ ] Style setting **Arrow responsiveness**: _Smooth_ (30 m / 1.5 s, today's look) · _Normal_ (12 m / 0.8 s, default) ·
+- [x] The arrow uses its own heading series; the free-mode camera rotation is unchanged (same frames as before for the map).
+- [x] Style setting **Arrow responsiveness**: _Smooth_ (30 m / 1.5 s, today's look) · _Normal_ (12 m / 0.8 s, default) ·
       _Responsive_ (8 m / 0.4 s). Saved in the project and in style presets; old projects get _Normal_.
-- [ ] Unit test, synthetic 90° corner at 4 m/s, 1 Hz: with _Normal_ the arrow has turned < 15° at 8 m before the corner and > 75° at 8 m after it.
-- [ ] Unit test with GPS jitter (±2 m point-to-point noise; ±3 m uniform noise per axis gave up to 33° with 10 m / 0.5 s, so the defaults were raised to 12 m / 0.8 s on a straight line): with _Normal_ the arrow heading stays within ±20° of the
+- [x] Unit test, synthetic 90° corner at 4 m/s, 1 Hz: with _Normal_ the arrow has turned < 15° at 8 m before the corner and > 75° at 8 m after it.
+- [x] Unit test with GPS jitter (±2 m point-to-point noise; ±3 m uniform noise per axis gave up to 33° with 10 m / 0.5 s, so the defaults were raised to 12 m / 0.8 s on a straight line): with _Normal_ the arrow heading stays within ±20° of the
       true direction, and the frame-to-frame change at 30 fps stays below the stability limit in `realworld.test.ts`.
-- [ ] Still a pure function of (project, _t_); preview and export identical.
+- [x] Still a pure function of (project, _t_); preview and export identical.
 - [ ] Checked on a real sprint GPX and a real forest GPX at 1×, 5× and 10× in the preview.
 
 ## Open questions / refinement

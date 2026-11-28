@@ -92,3 +92,38 @@ describe('Track', () => {
     expect(t.channels.heartRate).toBe(true);
   });
 });
+
+describe('arrow heading (STORY-43)', () => {
+  // 90° corner: 200 m north then 200 m east at 4 m/s, one GPS point per second; corner at t = 50 s.
+  const pts = [];
+  for (let i = 0; i <= 100; i++) {
+    const d = i * 4;
+    pts.push(d <= 200 ? pt(d, 0, i) : pt(200, d - 200, i));
+  }
+  const corner = new Track('C', pts);
+
+  it('turns at the corner with the normal profile', () => {
+    expect(Math.abs(angleDiff(0, corner.arrowHeadingAt(48, 'normal')))).toBeLessThan(15); // 8 m before
+    expect(Math.abs(angleDiff(0, corner.arrowHeadingAt(52, 'normal')))).toBeGreaterThan(75); // 8 m after
+  });
+
+  it('smooth profile is the calm camera heading; the camera heading is unchanged', () => {
+    for (const s of [40, 45, 50, 55, 60]) expect(corner.arrowHeadingAt(s, 'smooth')).toBe(corner.headingAt(s));
+    // The camera heading still rounds the corner widely (it starts turning well before it).
+    expect(Math.abs(angleDiff(0, corner.headingAt(46)))).toBeGreaterThan(2);
+  });
+
+  it('stays stable with GPS jitter (±2 m point-to-point noise)', () => {
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+    const noisy = [];
+    for (let i = 0; i <= 120; i++) noisy.push(pt(i * 4 + rnd() * 2, rnd() * 2, i));
+    const tr = new Track('N', noisy);
+    let maxStep = 0;
+    for (let s = 5; s < 115; s += 1 / 30) {
+      expect(Math.abs(angleDiff(0, tr.arrowHeadingAt(s, 'normal')))).toBeLessThan(20);
+      maxStep = Math.max(maxStep, Math.abs(angleDiff(tr.arrowHeadingAt(s - 1 / 30), tr.arrowHeadingAt(s))));
+    }
+    expect(maxStep).toBeLessThan(8);
+  });
+});

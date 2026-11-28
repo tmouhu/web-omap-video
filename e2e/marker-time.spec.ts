@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { hook } from './hook';
 
-/** STORY-44/45/46/47: marker shape, global time base, instant leg change, real-time clips. */
+/** STORY-43/44/45/46/47: marker shape and arrow responsiveness, global time base, instant leg change, real-time clips. */
 async function setup(page: import('@playwright/test').Page) {
   await page.goto('/');
   await page.getByTestId('load-sample').click();
@@ -19,10 +19,14 @@ async function setup(page: import('@playwright/test').Page) {
   await expect.poll(() => hook(page, (h) => h.app.courseMode)).toBe(true);
 }
 
-test('marker: circle / ring are style settings', async ({ page }) => {
+test('marker: circle / ring and arrow responsiveness are style settings', async ({ page }) => {
   await setup(page);
   await page.getByTestId('tab-style').click();
+  await expect(page.getByTestId('arrow-normal')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('arrow-responsive').click();
+  expect(await hook(page, (h) => h.app.style.track.arrowResponsiveness)).toBe('responsive');
   await page.getByTestId('marker-circle').click();
+  await expect(page.getByTestId('arrow-normal')).toBeHidden(); // arrow-only setting
   await expect(page.getByTestId('marker-ring')).toBeVisible();
   await page.getByTestId('marker-ring').check();
   expect(await hook(page, (h) => [h.app.style.track.marker, h.app.style.track.markerRing])).toEqual(['circle', true]);

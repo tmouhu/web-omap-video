@@ -3,6 +3,8 @@
  * Used by BOTH the preview and the exporter, so they cannot drift apart.
  */
 import type { FrameState } from '../anim/timeline';
+import { gridConvergence } from '../geo/crs';
+import { normalizeAngle } from '../geo/geo';
 import type { Course } from '../course/course';
 import { formatRouteLength, routeLength, routesForLeg, type RouteChoice } from '../course/routes';
 import type { Track } from '../track/track';
@@ -39,7 +41,7 @@ export function sceneForFrame(fs: FrameState, p: ProjectScene): SceneInput {
     crsCode: p.crsCode,
     track: p.track,
     time: fs.t,
-    heading: fs.gridHeading,
+    heading: arrowGridHeading(fs, p),
     style: p.style,
     legStartT: fs.legStartT,
     timeScale: p.timeScale ?? 1,
@@ -49,4 +51,10 @@ export function sceneForFrame(fs: FrameState, p: ProjectScene): SceneInput {
         : null,
     routes: routes.length ? { items: routes, alpha: fs.routeAlpha } : null,
   };
+}
+
+/** Grid heading of the navigation arrow (STORY-43): its own, more responsive series than the camera heading. */
+export function arrowGridHeading(fs: FrameState, p: Pick<ProjectScene, 'track' | 'crsCode' | 'style'>): number {
+  const h = p.track.arrowHeadingAt(fs.t, p.style.track.arrowResponsiveness);
+  return normalizeAngle(h + gridConvergence(p.crsCode, fs.position));
 }

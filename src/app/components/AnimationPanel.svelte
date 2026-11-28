@@ -394,6 +394,22 @@
       <input type="checkbox" bind:checked={st.markerRing} data-testid="marker-ring" />
       {t('run.markerRing')}
     </label>
+  {:else}
+    <div class="field">
+      <span>{t('run.responsiveness')}</span>
+      <div class="seg" role="group" aria-label={t('run.responsiveness')}>
+        {#each ['smooth', 'normal', 'responsive'] as const as v (v)}
+          <button
+            aria-pressed={st.arrowResponsiveness === v}
+            onclick={() => (st.arrowResponsiveness = v)}
+            data-testid={`arrow-${v}`}
+          >
+            {t(`run.resp.${v}`)}
+          </button>
+        {/each}
+      </div>
+      <small class="muted">{t('run.responsivenessHelp')}</small>
+    </div>
   {/if}
   <div class="grid2">
     <label class="field">

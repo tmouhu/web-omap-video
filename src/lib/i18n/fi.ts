@@ -528,6 +528,12 @@ export const fi: Messages = {
   'run.future': 'Näytä tuleva reitti',
   'run.leg': 'Nykyinen väli',
   'run.legend': 'nopeampi · oma mediaanivauhti · hitaampi/pysähtynyt',
+  'run.responsiveness': 'Nuoli seuraa käännöksiä',
+  'run.resp.smooth': 'Pehmeästi',
+  'run.resp.normal': 'Normaalisti',
+  'run.resp.responsive': 'Tarkasti',
+  'run.responsivenessHelp':
+    'Tarkasti kääntää nuolen heti mutkissa; pehmeästi peittää GPS-kohinan mutta pyöristää käännökset.',
   'run.seconds': 'Sekunnit',
   'run.single': 'Yksi väri',
   'run.tailColour': 'Hännän väri',

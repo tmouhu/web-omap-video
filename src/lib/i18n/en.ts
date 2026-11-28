@@ -528,6 +528,12 @@ export const en = {
   'run.future': 'Show the route still to come',
   'run.leg': 'Current leg',
   'run.legend': 'faster · your median pace · slower/stopped',
+  'run.responsiveness': 'Arrow follows turns',
+  'run.resp.smooth': 'Smoothly',
+  'run.resp.normal': 'Normal',
+  'run.resp.responsive': 'Closely',
+  'run.responsivenessHelp':
+    'Closely turns the arrow right at the corners; smoothly hides GPS noise but rounds the turns.',
   'run.seconds': 'Seconds',
   'run.single': 'Single colour',
   'run.tailColour': 'Tail colour',

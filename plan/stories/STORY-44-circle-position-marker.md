@@ -19,7 +19,8 @@ marker (e.g. when the GPS heading is noisy, or when I prefer a classic GPS-repla
 - [x] Drawn above the tail and the course, like the arrow. Heading is not needed: the circle looks the same when standing still.
 - [x] Optional **centre dot** / ring style (filled disc vs. ring with a transparent centre so the map under the runner stays
       readable). Default: filled disc.
-- [x] The setting is shown next to the arrow settings in the style step; arrow-only settings are hidden for the circle (none since STORY-43 was reverted).
+- [x] The setting is shown next to the arrow settings in the style step; arrow-only settings (e.g. arrow responsiveness,
+      [STORY-43](./STORY-43-responsive-arrow-heading.md)) are hidden for the circle.
 - [ ] All new labels via `t()` (en + fi) ✔. Unit/E2E (setting + save covered; *exported-frame pixel check still missing*): switching the marker changes the exported frame (pixel check at the
       runner position), and the setting survives save/open.
 

@@ -25,6 +25,17 @@ export const FALLBACK_SPEED = 3;
 export const MIN_PACE_SPEED = 0.5;
 const HEADING_STEP = 0.25;
 
+/**
+ * Arrow heading profiles (STORY-43): chord length (m) and zero-phase smoothing time constant (track s).
+ * The free-mode camera keeps the calm EN-4 heading (`headingAt`, 30 m / 1.5 s); the arrow follows turns closer.
+ */
+export type ArrowResponsiveness = 'smooth' | 'normal' | 'responsive';
+export const ARROW_HEADING: Record<ArrowResponsiveness, { window: number; tau: number }> = {
+  smooth: { window: 30, tau: 1.5 },
+  normal: { window: 12, tau: 0.8 },
+  responsive: { window: 8, tau: 0.4 },
+};
+
 export interface TrackOptions {
   /** Heading chord length (m). */
   headingWindow?: number;
@@ -44,7 +55,7 @@ export class Track {
   readonly channels: TrackChannels;
   readonly headingWindow: number;
   readonly headingTau: number;
-  private headingSeries: Float64Array | null = null;
+  private headingSeries = new Map<string, Float64Array>();
 
   constructor(name: string, src: GpxPoint[], opts: TrackOptions = {}) {
     if (src.length < 2) throw new Error('Track needs at least two points');
@@ -138,35 +149,50 @@ export class Track {
   }
 
   /**
-   * Smoothed normalized heading at t (degrees, true bearing). Zero-phase exponential smoothing
-   * (forward + backward pass) over a precomputed series in track time. Standing still keeps the
-   * previous heading.
+   * Smoothed normalized heading at t (degrees, true bearing) – the calm heading used by the free-mode camera.
+   * Zero-phase exponential smoothing (forward + backward pass) over a precomputed series in track time.
+   * Standing still keeps the previous heading.
    */
   headingAt(t: number): number {
-    const s = this.getHeadingSeries();
+    return this.smoothedHeadingAt(t, this.headingWindow, this.headingTau);
+  }
+
+  /** Heading of the navigation arrow (STORY-43): shorter chord and lighter smoothing than `headingAt`. */
+  arrowHeadingAt(t: number, responsiveness: ArrowResponsiveness = 'normal'): number {
+    const p = ARROW_HEADING[responsiveness] ?? ARROW_HEADING.normal;
+    return this.smoothedHeadingAt(t, p.window, p.tau);
+  }
+
+  /** Heading from a `window`-metre chord, zero-phase smoothed with time constant `tau` (track s); cached. */
+  smoothedHeadingAt(t: number, window: number, tau: number): number {
+    const s = this.getHeadingSeries(window, tau);
     const x = Math.min(Math.max(t, 0), this.duration) / HEADING_STEP;
     const i = Math.min(Math.floor(x), s.length - 2);
     const f = Math.min(1, x - i);
     return normalizeAngle(s[i] + (s[i + 1] - s[i]) * f);
   }
 
-  private getHeadingSeries(): Float64Array {
-    if (this.headingSeries) return this.headingSeries;
+  private getHeadingSeries(window: number, tau: number): Float64Array {
+    const key = `${window}/${tau}`;
+    const cached = this.headingSeries.get(key);
+    if (cached) return cached;
     const n = Math.max(2, Math.ceil(this.duration / HEADING_STEP) + 1);
     const raw = new Float64Array(n);
     let first: number | null = null;
-    for (let i = 0; i < n && first === null; i++) first = this.rawHeadingAt(i * HEADING_STEP);
+    for (let i = 0; i < n && first === null; i++) first = this.rawHeadingAt(i * HEADING_STEP, window);
     let prev = first ?? 0;
     // Unwrapped (continuous) angles so smoothing never crosses the 0/360 seam the long way.
     for (let i = 0; i < n; i++) {
-      const h = this.rawHeadingAt(i * HEADING_STEP);
+      const h = this.rawHeadingAt(i * HEADING_STEP, window);
       prev = h === null ? prev : prev + angleDiff(prev, h);
       raw[i] = prev;
     }
-    const a = 1 - Math.exp(-HEADING_STEP / this.headingTau);
-    for (let i = 1; i < n; i++) raw[i] = raw[i - 1] + (raw[i] - raw[i - 1]) * a;
-    for (let i = n - 2; i >= 0; i--) raw[i] = raw[i + 1] + (raw[i] - raw[i + 1]) * a;
-    this.headingSeries = raw;
+    if (tau > 0) {
+      const a = 1 - Math.exp(-HEADING_STEP / tau);
+      for (let i = 1; i < n; i++) raw[i] = raw[i - 1] + (raw[i] - raw[i - 1]) * a;
+      for (let i = n - 2; i >= 0; i--) raw[i] = raw[i + 1] + (raw[i] - raw[i + 1]) * a;
+    }
+    this.headingSeries.set(key, raw);
     return raw;
   }
 

@@ -95,7 +95,7 @@ Everything under **Open questions / refinement** is still to be decided.
 | [STORY-40](./stories/STORY-40-localisation-and-units.md)          | 6    | Localisation (FI/EN) and number formats                                   | Could  | EN-16                        |
 | [STORY-41](./stories/STORY-41-import-results-split-comparison.md) | 5    | Import results (IOF XML 2.0/3.0): leg sync and split comparison component | Should | STORY-22, STORY-23, STORY-32 |
 | [STORY-42](./stories/STORY-42-progressive-leg-zoom.md)            | 4    | Progressive leg zoom towards the target                                   | Should | STORY-24, STORY-26, STORY-27 |
-| [STORY-43](./stories/STORY-43-responsive-arrow-heading.md)        | 4    | Responsive arrow heading (reverted)                             |           Should | EN-4, STORY-28               |
+| [STORY-43](./stories/STORY-43-responsive-arrow-heading.md)        | 4    | Responsive arrow heading                                       |           Should | EN-4, STORY-28               |
 | [STORY-44](./stories/STORY-44-circle-position-marker.md)          | 4    | Circle as an alternative position marker                       |           Could  | STORY-28, STORY-39           |
 | [STORY-45](./stories/STORY-45-instant-leg-change.md)              | 4    | Instant leg change, no transition animation                    |           Should | STORY-25                     |
 | [STORY-46](./stories/STORY-46-real-time-transition-clips.md)      | 5    | Leg transitions as separate real-time clips                    |           Could  | STORY-25, STORY-36, STORY-45 |

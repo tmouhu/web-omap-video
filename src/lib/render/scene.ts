@@ -8,7 +8,7 @@ import type { Course } from '../course/course';
 import { drawOverprint, type CourseStyle } from './overprint';
 import { toRad, type LatLon } from '../geo/geo';
 import type { ViewState } from '../anim/timeline';
-import type { Track } from '../track/track';
+import type { ArrowResponsiveness, Track } from '../track/track';
 
 /** GPX tail and runner style (STORY-28/29). Sizes in CSS px. */
 export interface TrackStyle {
@@ -31,6 +31,8 @@ export interface TrackStyle {
   marker: 'arrow' | 'circle';
   /** Circle marker: ring with a transparent centre instead of a filled disc. */
   markerRing: boolean;
+  /** How closely the arrow follows turns (STORY-43). */
+  arrowResponsiveness: ArrowResponsiveness;
 }
 
 export const DEFAULT_TRACK_STYLE: TrackStyle = {
@@ -46,6 +48,7 @@ export const DEFAULT_TRACK_STYLE: TrackStyle = {
   arrowColor: '#ff3d00',
   marker: 'arrow',
   markerRing: false,
+  arrowResponsiveness: 'normal',
 };
 
 /**
